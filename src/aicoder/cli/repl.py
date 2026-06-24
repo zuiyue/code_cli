@@ -35,23 +35,16 @@ def exit_app(event):
     event.app.exit()
 
 
-import threading
+SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 
 @bindings.add("c-i")
 def screenshot(event):
-    """Ctrl+I: interactive screenshot in background thread, insert /image path when done."""
-    app = event.app
-
-    def _do():
-        subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
-                       check=False, capture_output=True)
-        if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-            app.loop.call_soon_threadsafe(
-                lambda: app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
-            )
-            app.invalidate()
-    threading.Thread(target=_do, daemon=True).start()
+    """Ctrl+I: interactive screenshot, insert /image path into buffer."""
+    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
+                   check=False, stderr=subprocess.DEVNULL)
+    if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
+        event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
