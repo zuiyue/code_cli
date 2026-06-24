@@ -42,11 +42,14 @@ SCREENSHOT_FLAG = "/tmp/aicoder_screenshot.flag"
 @bindings.add("f2")
 def screenshot(event):
     """F2: interactive screenshot. Flag file indicates pending image."""
-    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
-                   check=False, stderr=subprocess.DEVNULL)
+    result = subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
+                             check=False, stderr=subprocess.PIPE, text=True)
     if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
         Path(SCREENSHOT_FLAG).touch()
-        event.app.invalidate()
+    elif "could not create" in (result.stderr or ""):
+        print("\n  Screenshot failed: macOS Screen Recording permission required.\n"
+              "  Fix: System Settings > Privacy & Security > Screen Recording\n"
+              "  Or use /image <path> to attach an image file.")
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
