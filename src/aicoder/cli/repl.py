@@ -1,7 +1,6 @@
 import asyncio
 import os
 import subprocess
-import threading
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -41,21 +40,17 @@ SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 
 @bindings.add("f2")
-def screenshot(event):
-    """F2: interactive screenshot, properly restoring terminal state."""
-
-    async def _do():
-        await run_in_terminal(
-            lambda: subprocess.run(
-                ["screencapture", "-i", SCREENSHOT_TMP],
-                check=False, stderr=subprocess.DEVNULL,
-            )
+async def screenshot(event):
+    """F2: interactive screenshot, avoid terminal state corruption."""
+    await run_in_terminal(
+        lambda: subprocess.run(
+            ["screencapture", "-i", SCREENSHOT_TMP],
+            check=False, stderr=subprocess.DEVNULL,
         )
-        if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-            event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
-            event.app.invalidate()
-
-    event.app.create_background_task(_do())
+    )
+    if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
+        event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+        event.app.invalidate()
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
