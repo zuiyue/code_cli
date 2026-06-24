@@ -16,7 +16,7 @@ from aicoder.config.permissions import PermissionManager
 from aicoder.config.skills import SkillManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
-from aicoder.agent.models import list_models, get_model_info, supports_vision, find_vision_model
+from aicoder.agent.models import list_models, get_model_info, supports_vision, MODEL_REGISTRY
 from aicoder.agent.images import read_image, has_clipboard_image, read_clipboard_image, ImageError
 from aicoder.util import project_hash, RECURSION_LIMIT
 
@@ -65,25 +65,42 @@ def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
 
 def _ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
                           state_db, store_db, skill_paths):
-    """If current model lacks vision, auto-switch and rebuild agent. Returns (agent, new_model)."""
+    """If current model lacks vision, auto-switch to one with available API key."""
+    import os
     if supports_vision(current_model):
         return agent, current_model
 
-    vision_model = find_vision_model()
-    if not vision_model:
-        print("  No vision model available. Add one via /model or config.")
-        return agent, current_model
+    # Find first vision model with an available API key
+    tried = []
+    for name, info in MODEL_REGISTRY.items():
+        if not info.get("vision"):
+            continue
+        env_key = info.get("env_key", "")
+        if env_key and os.environ.get(env_key):
+            chosen = name
+            break
+        if cfg.model.api_key and info.get("api_base"):
+            chosen = name
+            break
+        tried.append(name)
+    else:
+        avail = ", ".join(tried)
+        keys_needed = {MODEL_REGISTRY[n].get("env_key", "") for n in tried if n in MODEL_REGISTRY}
+        raise RuntimeError(
+            f"No vision model with available API key.\n"
+            f"  Available models: {avail or 'none'}\n"
+            f"  Set one of: {' '.join(keys_needed) if keys_needed else 'OPENAI_API_KEY'}"
+        )
 
-    vm_info = get_model_info(vision_model)
-    vm_display = vm_info["display"] if vm_info else vision_model
-
+    new_info = get_model_info(chosen)
+    new_display = new_info["display"] if new_info else chosen
     old_info = get_model_info(current_model)
     old_display = old_info["display"] if old_info else current_model
-    print(f"  Auto-switch: {old_display} -> {vm_display} (image support)")
+    print(f"  Auto-switch: {old_display} -> {new_display} (image support)")
 
     new_agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
-                                vision_model, skill_paths)
-    return new_agent, vision_model
+                                chosen, skill_paths)
+    return new_agent, chosen
 
 
 def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
@@ -247,11 +264,16 @@ def run_repl(
                 if not desc:
                     desc = "Analyze this image"
 
-                agent, current_model = _ensure_vision_model(
-                    agent, cfg, current_model, project_root, bash_session,
-                    state_db, store_db, skill_paths,
-                )
-                cmd_handler.set_model(current_model)
+                try:
+                    agent, current_model = _ensure_vision_model(
+                        agent, cfg, current_model, project_root, bash_session,
+                        state_db, store_db, skill_paths,
+                    )
+                    cmd_handler.set_model(current_model)
+                except Exception as e:
+                    renderer.print_error(f"[Model switch failed: {e}]")
+                    print()
+                    continue
 
                 msg = _build_multimodal_message(desc, b64, mime)
                 try:
