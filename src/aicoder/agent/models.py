@@ -30,8 +30,8 @@ MODEL_REGISTRY = {
         "model": "deepseek-vl2",
         "api_base": "https://api.deepseek.com/beta",
         "env_key": "DEEPSEEK_API_KEY",
-        "vision": True,
-        "note": "May require beta access. Use gpt-4o as alternative.",
+        "vision": False,
+        "note": "Does not support standard image_url format. Use glm-4v or gpt-4o.",
     },
     "gpt-4o": {
         "display": "GPT-4o",
