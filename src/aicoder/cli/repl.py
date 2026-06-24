@@ -319,7 +319,8 @@ def run_repl(
                     _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
                 )
         except Exception as e:
-            renderer.print_error(f"[Error: {e}]")
+            import traceback
+            traceback.print_exc()
         print()
 
 
