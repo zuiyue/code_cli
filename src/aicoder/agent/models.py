@@ -49,6 +49,22 @@ MODEL_REGISTRY = {
         "env_key": "OPENAI_API_KEY",
         "vision": True,
     },
+    "glm-4v": {
+        "display": "GLM-4V",
+        "provider": "zhipu",
+        "model": "glm-4v",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+        "env_key": "ZHIPUAI_API_KEY",
+        "vision": True,
+    },
+    "glm-4v-flash": {
+        "display": "GLM-4V Flash",
+        "provider": "zhipu",
+        "model": "glm-4v-flash",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+        "env_key": "ZHIPUAI_API_KEY",
+        "vision": True,
+    },
 }
 
 
@@ -82,7 +98,7 @@ def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0
 
     key = api_key or os.environ.get(info["env_key"], "")
 
-    if info["provider"] == "deepseek" or info["provider"] == "openai":
+    if info["provider"] in ("deepseek", "openai", "zhipu"):
         return ChatOpenAI(
             model=info["model"],
             api_key=key,
