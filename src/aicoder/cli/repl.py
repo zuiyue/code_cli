@@ -379,8 +379,7 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
         except Exception as e:
             error_msg = str(e)
             if "interrupt" not in error_msg.lower() and "LangGraphInterrupt" not in type(e).__name__:
-                renderer.print_error(f"[Error: {error_msg}]")
-                return
+                raise  # Re-raise to let caller handle with traceback
 
         state = agent.get_state(config)
         interrupts = []
