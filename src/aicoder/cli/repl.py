@@ -1,10 +1,12 @@
 import asyncio
 import os
 import subprocess
+import threading
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
+from prompt_toolkit.application import run_in_terminal
 from pathlib import Path
 
 from aicoder.cli.renderer import StreamRenderer
@@ -43,8 +45,7 @@ def screenshot(event):
     """F2: interactive screenshot, properly restoring terminal state."""
 
     async def _do():
-        # suspend prompt_toolkit, run in raw terminal, then restore
-        await event.app.run_in_terminal(
+        await run_in_terminal(
             lambda: subprocess.run(
                 ["screencapture", "-i", SCREENSHOT_TMP],
                 check=False, stderr=subprocess.DEVNULL,
