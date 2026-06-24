@@ -282,10 +282,14 @@ def run_repl(
                                                    gate, renderer, prebuilt_message=msg)
                     )
                 except Exception as e:
-                    renderer.print_error(f"[Error: {e}]")
-                print()
-                continue
-
+                    err = str(e)
+                    if "image_url" in err and "400" in err:
+                        renderer.print_error(
+                            f"[{current_model} does not support image analysis.\n"
+                            f"  Set OPENAI_API_KEY to use GPT-4o for vision.]"
+                        )
+                    else:
+                        renderer.print_error(f"[Error: {err}]")
             # Existing command handling
             new_model = cmd_handler.current_model
             skills_changed = "/skill install" in user_input or "/skill remove" in user_input
