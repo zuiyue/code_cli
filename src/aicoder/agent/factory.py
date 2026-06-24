@@ -41,11 +41,7 @@ def create_agent(
         kwargs["store"] = store
 
     name = model_name or cfg.model.name
-    model = create_chat_model(
-        model_name=name,
-        api_key=cfg.model.api_key,
-        temperature=cfg.model.temperature,
-    )
+    model = create_chat_model(model_name=name, temperature=cfg.model.temperature)
 
     if skill_paths is None:
         skill_paths = ["./skills/"]
