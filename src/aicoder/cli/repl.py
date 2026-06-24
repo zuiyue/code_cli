@@ -1,4 +1,6 @@
 import asyncio
+import os
+import subprocess
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -14,7 +16,8 @@ from aicoder.config.permissions import PermissionManager
 from aicoder.config.skills import SkillManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
-from aicoder.agent.models import list_models, get_model_info
+from aicoder.agent.models import list_models, get_model_info, supports_vision, find_vision_model
+from aicoder.agent.images import read_image, has_clipboard_image, read_clipboard_image, ImageError
 from aicoder.util import project_hash, RECURSION_LIMIT
 
 
@@ -24,6 +27,7 @@ STYLE = Style.from_dict({
 })
 
 bindings = KeyBindings()
+SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 
 @bindings.add("c-d")
@@ -31,11 +35,74 @@ def exit_app(event):
     event.app.exit()
 
 
+@bindings.add("c-i")
+def screenshot(event):
+    """Ctrl+I: take interactive screenshot, insert /image path into prompt."""
+    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP], check=False, timeout=30)
+    if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
+        event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+    else:
+        print("\n  (screenshot cancelled)")
+
+
+def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
+    """Build a multimodal user message."""
+    return {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": text or "Analyze this image"},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+        ],
+    }
+
+
+def _ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
+                          state_db, store_db, skill_paths):
+    """If current model lacks vision, auto-switch and rebuild agent. Returns (agent, new_model)."""
+    if supports_vision(current_model):
+        return agent, current_model
+
+    vision_model = find_vision_model()
+    if not vision_model:
+        print("  No vision model available. Add one via /model or config.")
+        return agent, current_model
+
+    vm_info = get_model_info(vision_model)
+    vm_display = vm_info["display"] if vm_info else vision_model
+
+    old_info = get_model_info(current_model)
+    old_display = old_info["display"] if old_info else current_model
+    print(f"  Auto-switch: {old_display} -> {vm_display} (image support)")
+
+    new_agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                                vision_model, skill_paths)
+    return new_agent, vision_model
+
+
 def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                    model_name, skill_paths=None):
     return create_agent(cfg, project_root, bash_session, state_db,
                         store_db_path=store_db, model_name=model_name,
                         skill_paths=skill_paths)
+
+
+def _resolve_image(cmd_result: str) -> tuple[str, str] | None:
+    """Parse command result for image. Returns (b64, mime) or None."""
+    if cmd_result and cmd_result.startswith("__IMAGE_FILE__"):
+        path = cmd_result[len("__IMAGE_FILE__"):]
+        b64, mime = read_image(path)
+        print(f"  Image: {path} ({len(b64)//1024}KB, {mime})")
+        return b64, mime
+    elif cmd_result == "__IMAGE_CLIPBOARD__":
+        result = read_clipboard_image()
+        if result:
+            b64, mime = result
+            print(f"  Image from clipboard ({len(b64)//1024}KB, {mime})")
+            return b64, mime
+        else:
+            print("  No image found in clipboard")
+            return None
+    return None
 
 
 def run_repl(
@@ -99,6 +166,21 @@ def run_repl(
     }
 
     while True:
+        # Check clipboard for image before each prompt
+        image_b64 = None
+        image_mime = None
+
+        if has_clipboard_image():
+            try:
+                answer = input("  Image in clipboard. Attach? [y/N] ").strip().lower()
+                if answer == "y":
+                    result = read_clipboard_image()
+                    if result:
+                        image_b64, image_mime = result
+                        print(f"  Attached ({len(image_b64)//1024}KB, {image_mime})")
+            except (EOFError, KeyboardInterrupt):
+                pass
+
         try:
             user_input = session.prompt([("class:prompt", "> ")]).strip()
         except (EOFError, KeyboardInterrupt):
@@ -108,12 +190,46 @@ def run_repl(
         if not user_input:
             continue
 
+        # Handle commands
         if cmd_handler.is_command(user_input):
             result = cmd_handler.handle(user_input)
             if result == "exit":
                 print("Goodbye.")
                 break
 
+            # Check for /image command
+            img = _resolve_image(result) if result else None
+            if img:
+                # /image triggers next interactive prompt for description
+                try:
+                    desc = session.prompt(
+                        [("class:prompt", "  describe> ")],
+                    ).strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("  Cancelled.")
+                    continue
+
+                if not desc:
+                    desc = "Analyze this image"
+
+                agent, current_model = _ensure_vision_model(
+                    agent, cfg, current_model, project_root, bash_session,
+                    state_db, store_db, skill_paths,
+                )
+                cmd_handler.set_model(current_model)
+
+                msg = _build_multimodal_message(desc, img[0], img[1])
+                try:
+                    asyncio.run(
+                        _async_invoke_with_stream(agent, None, langgraph_config,
+                                                   gate, renderer, prebuilt_message=msg)
+                    )
+                except Exception as e:
+                    renderer.print_error(f"[Error: {e}]")
+                print()
+                continue
+
+            # Existing command handling
             new_model = cmd_handler.current_model
             skills_changed = "/skill install" in user_input or "/skill remove" in user_input
 
@@ -161,24 +277,41 @@ def run_repl(
                 print(result)
             continue
 
+        # Regular text message (with optional image from clipboard detection)
         if cmd_handler.current_model != current_model:
             current_model = cmd_handler.current_model
             agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                                    current_model, skill_paths)
 
         try:
-            asyncio.run(
-                _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
-            )
+            if image_b64:
+                agent, current_model = _ensure_vision_model(
+                    agent, cfg, current_model, project_root, bash_session,
+                    state_db, store_db, skill_paths,
+                )
+                cmd_handler.set_model(current_model)
+                msg = _build_multimodal_message(user_input, image_b64, image_mime)
+                asyncio.run(
+                    _async_invoke_with_stream(agent, None, langgraph_config,
+                                               gate, renderer, prebuilt_message=msg)
+                )
+            else:
+                asyncio.run(
+                    _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
+                )
         except Exception as e:
             renderer.print_error(f"[Error: {e}]")
         print()
 
 
-async def _async_invoke_with_stream(agent, user_input, config, gate, renderer, max_retries=5):
+async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
+                                     max_retries=5, prebuilt_message: dict | None = None):
     from langgraph.types import Command
 
-    next_input = {"messages": [{"role": "user", "content": user_input}]}
+    if prebuilt_message:
+        next_input = {"messages": [prebuilt_message]}
+    else:
+        next_input = {"messages": [{"role": "user", "content": user_input}]}
 
     for retry in range(max_retries):
         try:

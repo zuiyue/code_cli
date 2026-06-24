@@ -3,7 +3,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
-                "/skills", "/skill", "/exit"]
+                "/skills", "/skill", "/image", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -76,6 +76,7 @@ class CommandHandler:
             "/models": self._list_models,
             "/skills": self._list_skills,
             "/skill": lambda: self._skill(arg, arg2),
+            "/image": lambda: self._image(arg),
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -95,6 +96,7 @@ class CommandHandler:
             "  /skill <name>      Show skill details\n"
             "  /skill install <url>  Install skill from git\n"
             "  /skill remove <name>  Remove installed skill\n"
+            "  /image [path]      Attach an image (Ctrl+I to screenshot)\n"
             "  /exit              Exit"
         )
 
@@ -179,3 +181,8 @@ class CommandHandler:
             return f"Skill '{arg}' not found."
 
         return "Usage: /skill <name> | /skill install <url> | /skill remove <name>"
+
+    def _image(self, arg: str) -> str:
+        if not arg:
+            return "__IMAGE_CLIPBOARD__"
+        return f"__IMAGE_FILE__{arg}"

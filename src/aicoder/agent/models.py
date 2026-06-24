@@ -14,6 +14,7 @@ MODEL_REGISTRY = {
         "model": "deepseek-chat",
         "api_base": "https://api.deepseek.com",
         "env_key": "DEEPSEEK_API_KEY",
+        "vision": False,
     },
     "deepseek-reasoner": {
         "display": "DeepSeek Reasoner",
@@ -21,6 +22,16 @@ MODEL_REGISTRY = {
         "model": "deepseek-reasoner",
         "api_base": "https://api.deepseek.com",
         "env_key": "DEEPSEEK_API_KEY",
+        "vision": False,
+    },
+    "deepseek-vl2": {
+        "display": "DeepSeek VL2 (beta)",
+        "provider": "deepseek",
+        "model": "deepseek-vl2",
+        "api_base": "https://api.deepseek.com/beta",
+        "env_key": "DEEPSEEK_API_KEY",
+        "vision": True,
+        "note": "May require beta access. Use gpt-4o as alternative.",
     },
     "gpt-4o": {
         "display": "GPT-4o",
@@ -28,6 +39,7 @@ MODEL_REGISTRY = {
         "model": "gpt-4o",
         "api_base": "https://api.openai.com/v1",
         "env_key": "OPENAI_API_KEY",
+        "vision": True,
     },
     "gpt-4o-mini": {
         "display": "GPT-4o Mini",
@@ -35,8 +47,24 @@ MODEL_REGISTRY = {
         "model": "gpt-4o-mini",
         "api_base": "https://api.openai.com/v1",
         "env_key": "OPENAI_API_KEY",
+        "vision": True,
     },
 }
+
+
+def supports_vision(model_name: str) -> bool:
+    info = get_model_info(model_name)
+    return info.get("vision", False) if info else False
+
+
+def find_vision_model(preferred: str = "gpt-4o") -> str | None:
+    """Find an available vision model, preferring the given one."""
+    if preferred in MODEL_REGISTRY and MODEL_REGISTRY[preferred].get("vision"):
+        return preferred
+    for name, info in MODEL_REGISTRY.items():
+        if info.get("vision"):
+            return name
+    return None
 
 
 def list_models() -> list[str]:
