@@ -26,6 +26,7 @@ dependencies = [
     "rich>=13.0",
     "tomli>=2.0",
     "tomli-w>=1.0",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -40,3 +41,9 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aicoder"]
+
+[tool.hatch.build]
+include = ["src/aicoder/skills/**"]

@@ -18,6 +18,7 @@ def create_agent(
     state_db_path: str,
     store_db_path: str | None = None,
     model_name: str | None = None,
+    skill_paths: list[str] | None = None,
 ):
     system_prompt = build_system_prompt(cfg, project_root)
     bash_tool = create_bash_tool(project_root)
@@ -46,6 +47,9 @@ def create_agent(
         temperature=cfg.model.temperature,
     )
 
+    if skill_paths is None:
+        skill_paths = ["./skills/"]
+
     agent = create_deep_agent(
         name="aicoder",
         model=model,
@@ -54,7 +58,7 @@ def create_agent(
         subagents=subagents,
         backend=FilesystemBackend(root_dir=project_root, virtual_mode=False),
         interrupt_on={"bash": True},
-        skills=["./skills/"],
+        skills=skill_paths,
         checkpointer=checkpointer,
         **kwargs,
     )

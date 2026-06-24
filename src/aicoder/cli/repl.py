@@ -15,6 +15,7 @@ from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
 from aicoder.agent.models import list_models, get_model_info
 from aicoder.cli.commands import ModelCompleter
+from aicoder.config.skills import SkillManager
 
 
 STYLE = Style.from_dict({
@@ -35,9 +36,9 @@ def _project_hash(project_root: str) -> str:
     return hashlib.sha256(str(Path(project_root).resolve()).encode()).hexdigest()[:12]
 
 
-def _rebuild_agent(cfg, project_root, state_db, model_name):
-    """Recreate agent with a different model."""
-    return create_agent(cfg, project_root, state_db, model_name=model_name)
+def _rebuild_agent(cfg, project_root, state_db, model_name, skill_paths=None):
+    """Recreate agent with a different model and/or skills."""
+    return create_agent(cfg, project_root, state_db, model_name=model_name, skill_paths=skill_paths)
 
 
 def run_repl(
@@ -60,28 +61,39 @@ def run_repl(
 
     init_bash_session(project_root, cfg.ui.max_output_lines)
 
+    # Skills
+    pkg_dir = Path(__file__).resolve().parent.parent
+    skill_mgr = SkillManager(config_dir, pkg_dir)
+    skill_paths = skill_mgr.resolve_paths(project_root)
+
     current_model = cfg.model.name
-    agent = create_agent(cfg, project_root, state_db, model_name=current_model)
+    agent = create_agent(cfg, project_root, state_db,
+                         model_name=current_model, skill_paths=skill_paths)
 
     cmd_handler = CommandHandler(sm, str(sessions_dir), ph, thread_id)
     cmd_handler.set_model(current_model)
+    cmd_handler.set_skill_manager(skill_mgr, project_root)
     renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking)
 
     model_info = get_model_info(current_model)
     model_display = model_info["display"] if model_info else current_model
     print(f"Starting aicoder (project: {project_root}, session: {thread_id}, model: {model_display})")
+    skill_count = len(skill_mgr.discover(project_root))
+    print(f"Skills loaded: {skill_count}")
     print("Type /help for commands.\n")
 
     history_path = config_dir / "history" / f"{ph}.txt"
     history_path.parent.mkdir(parents=True, exist_ok=True)
 
+    completer = ModelCompleter()
+    completer.set_skill_names([s.name for s in skill_mgr.discover(project_root)])
     session = PromptSession(
         history=FileHistory(str(history_path)),
         key_bindings=bindings,
         style=STYLE,
         multiline=False,
         wrap_lines=True,
-        completer=ModelCompleter(),
+        completer=completer,
     )
 
     langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
@@ -104,14 +116,19 @@ def run_repl(
 
             # Check if model changed
             new_model = cmd_handler.current_model
-            if new_model != current_model:
-                old_info = get_model_info(current_model)
-                new_info = get_model_info(new_model)
-                old_name = old_info["display"] if old_info else current_model
-                new_name = new_info["display"] if new_info else new_model
-                current_model = new_model
-                agent = _rebuild_agent(cfg, project_root, state_db, current_model)
-                print(f"  {old_name} -> {new_name}")
+            skills_changed = "/skill install" in user_input or "/skill remove" in user_input
+
+            if new_model != current_model or skills_changed:
+                if new_model != current_model:
+                    old_info = get_model_info(current_model)
+                    new_info = get_model_info(new_model)
+                    old_name = old_info["display"] if old_info else current_model
+                    new_name = new_info["display"] if new_info else new_model
+                    current_model = new_model
+                    print(f"  {old_name} -> {new_name}")
+                skill_paths = skill_mgr.resolve_paths(project_root)
+                agent = _rebuild_agent(cfg, project_root, state_db, current_model, skill_paths)
+                completer.set_skill_names([s.name for s in skill_mgr.discover(project_root)])
 
             # Handle /model without args: enter interactive selection
             if result and result.startswith("\n  Current:"):
@@ -148,7 +165,8 @@ def run_repl(
         # Check model sync
         if cmd_handler.current_model != current_model:
             current_model = cmd_handler.current_model
-            agent = _rebuild_agent(cfg, project_root, state_db, current_model)
+            skill_paths = skill_mgr.resolve_paths(project_root)
+            agent = _rebuild_agent(cfg, project_root, state_db, current_model, skill_paths)
 
         # Run the async invoke loop
         try:
