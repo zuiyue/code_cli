@@ -190,8 +190,12 @@ def run_repl(
         completer=completer,
     )
 
+    # Use a persistent event loop to avoid httpx connection issues
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     langgraph_config = {
-        "configurable": {"thread_id": str(thread_id)},
+        "configurable": {"thread_id": thread_id},
         str(RECURSION_LIMIT): RECURSION_LIMIT,
     }
 
@@ -277,7 +281,7 @@ def run_repl(
 
                 msg = _build_multimodal_message(desc, b64, mime)
                 try:
-                    asyncio.run(
+                    loop.run_until_complete(
                         _async_invoke_with_stream(agent, None, langgraph_config,
                                                    gate, renderer, prebuilt_message=msg)
                     )
@@ -348,12 +352,12 @@ def run_repl(
                 )
                 cmd_handler.set_model(current_model)
                 msg = _build_multimodal_message(user_input, image_b64, image_mime)
-                asyncio.run(
+                loop.run_until_complete(
                     _async_invoke_with_stream(agent, None, langgraph_config,
                                                gate, renderer, prebuilt_message=msg)
                 )
             else:
-                asyncio.run(
+                loop.run_until_complete(
                     _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
                 )
         except Exception as e:
