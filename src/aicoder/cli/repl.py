@@ -82,7 +82,7 @@ def run_repl(
         wrap_lines=True,
     )
 
-    langgraph_config = {"configurable": {"thread_id": thread_id}}
+    langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
 
     while True:
         try:
