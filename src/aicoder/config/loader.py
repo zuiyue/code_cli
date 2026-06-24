@@ -5,9 +5,11 @@ import tomllib
 
 @dataclass
 class ModelConfig:
-    provider: str = "anthropic"
-    name: str = "claude-sonnet-4-5-20250929"
-    api_key_env: str = "ANTHROPIC_API_KEY"
+    provider: str = "deepseek"
+    name: str = "deepseek-chat"
+    api_key: str = ""
+    api_base: str = "https://api.deepseek.com"
+    temperature: float = 0.0
 
 
 @dataclass

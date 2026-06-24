@@ -41,6 +41,10 @@ def main():
     config_dir = get_config_dir()
     cfg = load_config(config_dir)
 
+    # Inject API key from env if not in config
+    if not cfg.model.api_key:
+        cfg.model.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+
     ph = _project_hash(project_root)
 
     if args.list_sessions:

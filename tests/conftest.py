@@ -18,8 +18,10 @@ def config_dir(temp_dir):
     config_toml = cfg / "config.toml"
     config_toml.write_text("""
 [model]
-provider = "anthropic"
-name = "claude-sonnet-4-5-20250929"
+provider = "deepseek"
+name = "deepseek-chat"
+api_key = "test-key"
+api_base = "https://api.deepseek.com"
 
 [bash]
 timeout_ms = 120000

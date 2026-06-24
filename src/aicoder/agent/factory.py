@@ -1,7 +1,9 @@
+import os
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.store.sqlite import SqliteStore
+from langchain_openai import ChatOpenAI
 
 from aicoder.config.loader import AppConfig
 from aicoder.agent.prompt import build_system_prompt
@@ -30,9 +32,17 @@ def create_agent(
         store = SqliteStore.from_conn_string(store_db_path)
         kwargs["store"] = store
 
+    api_key = cfg.model.api_key or os.environ.get("DEEPSEEK_API_KEY", "")
+    model = ChatOpenAI(
+        model=cfg.model.name,
+        api_key=api_key,
+        base_url=cfg.model.api_base,
+        temperature=cfg.model.temperature,
+    )
+
     agent = create_deep_agent(
         name="aicoder",
-        model=cfg.model.name,
+        model=model,
         tools=[bash_tool],
         system_prompt=system_prompt,
         subagents=subagents,

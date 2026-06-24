@@ -4,7 +4,7 @@ from aicoder.config.loader import load_config, AppConfig
 class TestLoadConfig:
     def test_loads_default_config(self, config_dir):
         cfg = load_config(config_dir)
-        assert cfg.model.name == "claude-sonnet-4-5-20250929"
+        assert cfg.model.name == "deepseek-chat"
         assert cfg.bash.timeout_ms == 120000
         assert cfg.ui.show_thinking is True
 
@@ -23,4 +23,4 @@ theme = "light"
 
     def test_missing_file_returns_defaults(self, temp_dir):
         cfg = load_config(temp_dir / ".aicoder")
-        assert cfg.model.name == "claude-sonnet-4-5-20250929"
+        assert cfg.model.name == "deepseek-chat"
