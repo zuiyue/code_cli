@@ -205,6 +205,8 @@ def run_repl(
 
         try:
             raw = session.prompt([("class:prompt", "> ")])
+            # prompt_toolkit overwrites the event loop; restore ours
+            asyncio.set_event_loop(loop)
             if not isinstance(raw, str):
                 continue
             user_input = raw.strip()
