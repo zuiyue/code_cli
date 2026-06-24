@@ -40,16 +40,14 @@ SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 
 @bindings.add("f2")
-async def screenshot(event):
-    """F2: interactive screenshot, avoid terminal state corruption."""
-    await run_in_terminal(
-        lambda: subprocess.run(
-            ["screencapture", "-i", SCREENSHOT_TMP],
-            check=False, stderr=subprocess.DEVNULL,
-        )
-    )
+def screenshot(event):
+    """F2: interactive screenshot, insert /image path into buffer."""
+    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
+                   check=False, stderr=subprocess.DEVNULL)
     if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-        event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+        buf = event.app.current_buffer
+        buf.text += f"/image {SCREENSHOT_TMP} "
+        buf.cursor_position = len(buf.text)
         event.app.invalidate()
 
 
