@@ -2,7 +2,8 @@ import argparse
 import os
 from pathlib import Path
 
-from aicoder.config.loader import load_config, AppConfig
+from aicoder.config.loader import load_config
+from aicoder.agent.models import list_models
 
 
 def get_config_dir() -> Path:
@@ -25,6 +26,12 @@ def main():
         help="Project root directory (default: current directory)",
     )
     parser.add_argument(
+        "--model", "-m",
+        default="deepseek-chat",
+        choices=list_models(),
+        help="Model to use (default: deepseek-chat)",
+    )
+    parser.add_argument(
         "--continue", "-c",
         dest="continue_session",
         action="store_true",
@@ -35,15 +42,29 @@ def main():
         action="store_true",
         help="List saved sessions and exit",
     )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List available models and exit",
+    )
     args = parser.parse_args()
+
+    if args.list_models:
+        from aicoder.agent.models import get_model_info
+        for name in list_models():
+            info = get_model_info(name)
+            print(f"  {name:25s} {info['display']} ({info['provider']})")
+        return
 
     project_root = str(Path(args.project).resolve())
     config_dir = get_config_dir()
     cfg = load_config(config_dir)
 
-    # Inject API key from env if not in config
     if not cfg.model.api_key:
         cfg.model.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+
+    # CLI --model overrides config
+    cfg.model.name = args.model
 
     ph = _project_hash(project_root)
 

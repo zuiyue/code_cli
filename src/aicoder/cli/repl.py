@@ -1,3 +1,4 @@
+import asyncio
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -12,6 +13,7 @@ from aicoder.config.loader import AppConfig
 from aicoder.config.permissions import PermissionManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
+from aicoder.agent.models import list_models, get_model_info
 
 
 STYLE = Style.from_dict({
@@ -30,6 +32,11 @@ def exit_app(event):
 def _project_hash(project_root: str) -> str:
     import hashlib
     return hashlib.sha256(str(Path(project_root).resolve()).encode()).hexdigest()[:12]
+
+
+def _rebuild_agent(cfg, project_root, state_db, model_name):
+    """Recreate agent with a different model."""
+    return create_agent(cfg, project_root, state_db, model_name=model_name)
 
 
 def run_repl(
@@ -52,12 +59,17 @@ def run_repl(
 
     init_bash_session(project_root, cfg.ui.max_output_lines)
 
-    print(f"Starting aicoder (project: {project_root}, session: {thread_id})")
-    print("Type /help for commands.\n")
-    agent = create_agent(cfg, project_root, state_db)
+    current_model = cfg.model.name
+    agent = create_agent(cfg, project_root, state_db, model_name=current_model)
 
     cmd_handler = CommandHandler(sm, str(sessions_dir), ph, thread_id)
+    cmd_handler.set_model(current_model)
     renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking)
+
+    model_info = get_model_info(current_model)
+    model_display = model_info["display"] if model_info else current_model
+    print(f"Starting aicoder (project: {project_root}, session: {thread_id}, model: {model_display})")
+    print("Type /help for commands.\n")
 
     history_path = config_dir / "history" / f"{ph}.txt"
     history_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +81,8 @@ def run_repl(
         multiline=False,
         wrap_lines=True,
     )
+
+    langgraph_config = {"configurable": {"thread_id": thread_id}}
 
     while True:
         try:
@@ -85,36 +99,52 @@ def run_repl(
             if result == "exit":
                 print("Goodbye.")
                 break
+
+            # Check if model changed
+            new_model = cmd_handler.current_model
+            if new_model != current_model:
+                current_model = new_model
+                agent = _rebuild_agent(cfg, project_root, state_db, current_model)
+
             print(result)
             continue
 
-        config = {"configurable": {"thread_id": thread_id}}
+        # Check model sync
+        if cmd_handler.current_model != current_model:
+            current_model = cmd_handler.current_model
+            agent = _rebuild_agent(cfg, project_root, state_db, current_model)
 
-        # Invoke agent; handle interrupts for bash approval
-        result = _invoke_with_interrupts(agent, user_input, config, gate)
-        if result is not None:
-            messages = result.get("messages", [])
-            if messages:
-                last_msg = messages[-1]
-                content = getattr(last_msg, "content", str(last_msg))
-                renderer.print_response(content)
+        # Run the async invoke loop
+        try:
+            asyncio.run(
+                _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
+            )
+        except Exception as e:
+            renderer.print_error(f"[Error: {e}]")
         print()
 
 
-def _invoke_with_interrupts(agent, user_input, config, gate, max_retries=5):
-    """Invoke agent; if bash interrupt fires, get approval + resume and return final result."""
+async def _async_invoke_with_stream(agent, user_input, config, gate, renderer, max_retries=5):
+    """Invoke agent with streaming; handle interrupt + approval."""
     from langgraph.types import Command
 
     next_input = {"messages": [{"role": "user", "content": user_input}]}
 
-    for _ in range(max_retries):
+    for retry in range(max_retries):
         try:
-            return agent.invoke(next_input, config=config)
+            events = agent.astream_events(next_input, config=config, version="v2")
+            final = await renderer.render_stream(events)
+            if final:
+                renderer.print_response(final)
+            return
         except Exception as e:
             error_msg = str(e)
             if "interrupt" not in error_msg.lower():
-                print(f"\n[Error: {error_msg}]")
-                return None
+                if "LangGraphInterrupt" in type(e).__name__:
+                    pass  # handle below
+                else:
+                    renderer.print_error(f"[Error: {error_msg}]")
+                    return
 
         # Handle interrupt
         state = agent.get_state(config)
@@ -125,7 +155,10 @@ def _invoke_with_interrupts(agent, user_input, config, gate, max_retries=5):
                     interrupts.extend(task.interrupts)
 
         if not interrupts:
-            return None
+            # Try LangGraphInterrupt
+            if hasattr(e, "__cause__"):
+                renderer.print_error(f"[Interrupt: {error_msg[:100]}]")
+            return
 
         for interrupt in interrupts:
             tool_input = {}
@@ -134,7 +167,7 @@ def _invoke_with_interrupts(agent, user_input, config, gate, max_retries=5):
             command = tool_input.get("command", str(tool_input))
 
             if gate.is_denied(command):
-                print(f"[Denied: {command[:80]}]")
+                renderer.print_info(f"  [Denied: {command[:80]}]")
                 next_input = Command(resume={"decision": "deny"})
                 continue
 
@@ -154,4 +187,4 @@ def _invoke_with_interrupts(agent, user_input, config, gate, max_retries=5):
             else:
                 next_input = Command(resume={"decision": "deny"})
 
-    return None
+    renderer.print_error("[Max retries exceeded]")

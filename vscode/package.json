@@ -1,0 +1,32 @@
+{
+  "name": "aicoder-vscode",
+  "displayName": "AI Coder",
+  "description": "AI-powered terminal coding assistant for VS Code",
+  "version": "0.1.0",
+  "publisher": "zuiyue",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aicoder.openTerminal",
+        "title": "AI Coder: Open Terminal"
+      },
+      {
+        "command": "aicoder.openInExplorer",
+        "title": "AI Coder: Open in File Explorer"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "aicoder.openTerminal",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      }
+    ]
+  }
+}

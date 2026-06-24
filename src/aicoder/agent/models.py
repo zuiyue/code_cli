@@ -1,0 +1,73 @@
+import os
+from langchain_openai import ChatOpenAI
+
+# Try optional imports for other providers
+try:
+    from langchain_anthropic import ChatAnthropic
+except ImportError:
+    ChatAnthropic = None
+
+MODEL_REGISTRY = {
+    "deepseek-chat": {
+        "display": "DeepSeek Chat",
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "api_base": "https://api.deepseek.com",
+        "env_key": "DEEPSEEK_API_KEY",
+    },
+    "deepseek-reasoner": {
+        "display": "DeepSeek Reasoner",
+        "provider": "deepseek",
+        "model": "deepseek-reasoner",
+        "api_base": "https://api.deepseek.com",
+        "env_key": "DEEPSEEK_API_KEY",
+    },
+    "gpt-4o": {
+        "display": "GPT-4o",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "api_base": "https://api.openai.com/v1",
+        "env_key": "OPENAI_API_KEY",
+    },
+    "gpt-4o-mini": {
+        "display": "GPT-4o Mini",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "api_base": "https://api.openai.com/v1",
+        "env_key": "OPENAI_API_KEY",
+    },
+}
+
+
+def list_models() -> list[str]:
+    return list(MODEL_REGISTRY.keys())
+
+
+def get_model_info(name: str) -> dict | None:
+    return MODEL_REGISTRY.get(name)
+
+
+def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0.0):
+    info = get_model_info(model_name)
+    if not info:
+        raise ValueError(f"Unknown model: {model_name}. Available: {list_models()}")
+
+    key = api_key or os.environ.get(info["env_key"], "")
+
+    if info["provider"] == "deepseek" or info["provider"] == "openai":
+        return ChatOpenAI(
+            model=info["model"],
+            api_key=key,
+            base_url=info["api_base"],
+            temperature=temperature,
+        )
+    elif info["provider"] == "anthropic":
+        if ChatAnthropic is None:
+            raise ImportError("langchain-anthropic is required for Anthropic models")
+        return ChatAnthropic(
+            model=info["model"],
+            api_key=key,
+            base_url=info.get("api_base"),
+            temperature=temperature,
+        )
+    raise ValueError(f"Unknown provider: {info['provider']}")
