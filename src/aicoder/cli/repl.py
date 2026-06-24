@@ -14,6 +14,7 @@ from aicoder.config.permissions import PermissionManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
 from aicoder.agent.models import list_models, get_model_info
+from aicoder.cli.commands import ModelCompleter
 
 
 STYLE = Style.from_dict({
@@ -80,6 +81,7 @@ def run_repl(
         style=STYLE,
         multiline=False,
         wrap_lines=True,
+        completer=ModelCompleter(),
     )
 
     langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
@@ -103,10 +105,44 @@ def run_repl(
             # Check if model changed
             new_model = cmd_handler.current_model
             if new_model != current_model:
+                old_info = get_model_info(current_model)
+                new_info = get_model_info(new_model)
+                old_name = old_info["display"] if old_info else current_model
+                new_name = new_info["display"] if new_info else new_model
                 current_model = new_model
                 agent = _rebuild_agent(cfg, project_root, state_db, current_model)
+                print(f"  {old_name} -> {new_name}")
 
-            print(result)
+            # Handle /model without args: enter interactive selection
+            if result and result.startswith("\n  Current:"):
+                print(result)
+                try:
+                    choice = session.prompt(
+                        [("class:prompt", "  model> ")],
+                        completer=ModelCompleter(),
+                    ).strip()
+                    if choice:
+                        # Try number first
+                        models = list_models()
+                        if choice.isdigit() and 1 <= int(choice) <= len(models):
+                            choice = models[int(choice) - 1]
+                        if choice in models:
+                            old_info = get_model_info(current_model)
+                            new_info = get_model_info(choice)
+                            old_name = old_info["display"] if old_info else current_model
+                            new_name = new_info["display"] if new_info else choice
+                            cmd_handler.set_model(choice)
+                            current_model = choice
+                            agent = _rebuild_agent(cfg, project_root, state_db, current_model)
+                            print(f"  Switched: {old_name} -> {new_name}")
+                        else:
+                            print(f"  Unknown model: {choice}")
+                    else:
+                        print("  Canceled.")
+                except (EOFError, KeyboardInterrupt):
+                    print("  Canceled.")
+            else:
+                print(result)
             continue
 
         # Check model sync

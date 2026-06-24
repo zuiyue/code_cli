@@ -1,4 +1,25 @@
 from aicoder.agent.models import list_models, get_model_info
+from prompt_toolkit.completion import Completer, Completion
+
+
+class ModelCompleter(Completer):
+    """Tab-completion for /model command with model names."""
+    def __init__(self):
+        self._commands = ["/help", "/clear", "/sessions", "/model", "/models", "/exit"]
+        self._models = list_models()
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        if text.startswith("/model "):
+            prefix = text.split(" ", 1)[1] if " " in text else ""
+            for m in self._models:
+                if m.startswith(prefix):
+                    yield Completion(m, start_position=-len(prefix))
+        elif text.startswith("/"):
+            prefix = text
+            for c in self._commands:
+                if c.startswith(prefix):
+                    yield Completion(c, start_position=-len(prefix))
 
 
 class CommandHandler:
@@ -72,9 +93,16 @@ class CommandHandler:
 
     def _model(self, arg: str) -> str:
         if not arg:
+            models = list_models()
             info = get_model_info(self._current_model)
             name = info["display"] if info else self._current_model
-            return f"Current model: {self._current_model} ({name})\nUse /model <name> to switch. /models to list."
+            lines = [f"\n  Current: {self._current_model} ({name})", "  Models:"]
+            for i, m in enumerate(models, 1):
+                marker = " >>>" if m == self._current_model else ""
+                mi = get_model_info(m)
+                lines.append(f"    {i}. {m} ({mi['display']}){marker}")
+            lines.append("\n  Type number or model name to switch, Enter to cancel.")
+            return "\n".join(lines)
 
         if arg not in list_models():
             avail = ", ".join(list_models())
