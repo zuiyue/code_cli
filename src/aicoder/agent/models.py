@@ -1,5 +1,22 @@
 import os
+import httpx
 from langchain_openai import ChatOpenAI
+
+# Monkey-patch httpx to filter non-ASCII headers (prompt_toolkit causes Unicode leak)
+_original_headers_init = httpx.Headers.__init__
+def _safe_headers_init(self, headers=None, encoding=None):
+    if headers and isinstance(headers, dict):
+        cleaned = {}
+        for k, v in headers.items():
+            if isinstance(v, str):
+                try:
+                    v.encode(encoding or "ascii")
+                except UnicodeEncodeError:
+                    v = v.encode("utf-8", errors="replace").decode("ascii", errors="replace")
+            cleaned[k] = v
+        headers = cleaned
+    return _original_headers_init(self, headers, encoding=encoding)
+httpx.Headers.__init__ = _safe_headers_init
 
 # Try optional imports for other providers
 try:
@@ -104,7 +121,6 @@ def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0
             api_key=key,
             base_url=info["api_base"],
             temperature=temperature,
-            default_headers={"Accept": "application/json"},
         )
     elif info["provider"] == "anthropic":
         if ChatAnthropic is None:

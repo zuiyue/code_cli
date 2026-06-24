@@ -282,8 +282,7 @@ def run_repl(
                                                    gate, renderer, prebuilt_message=msg)
                     )
                 except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                    renderer.print_error(f"[Error: {e}]")
                 print()
                 continue
 
@@ -379,8 +378,7 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
         except Exception as e:
             error_msg = str(e)
             if "interrupt" not in error_msg.lower() and "LangGraphInterrupt" not in type(e).__name__:
-                import traceback
-                traceback.print_exc()
+                renderer.print_error(f"[Error: {error_msg}]")
                 return
 
         state = agent.get_state(config)
