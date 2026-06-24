@@ -42,6 +42,9 @@ def create_agent(
 
     name = model_name or cfg.model.name
     model = create_chat_model(model_name=name, temperature=cfg.model.temperature)
+    # Debug
+    import sys
+    print(f"[DEBUG create_agent] model={name}, api_base={model.openai_api_base}, key_len={len(model.openai_api_key or '')}", file=sys.stderr)
 
     if skill_paths is None:
         skill_paths = ["./skills/"]
