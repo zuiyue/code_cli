@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 import tomllib
+from typing import Any
 
 
 @dataclass
@@ -16,6 +17,7 @@ class ModelConfig:
 class BashConfig:
     timeout_ms: int = 120000
     allowed_commands: list[str] = field(default_factory=list)
+    interrupt: bool = True
 
 
 @dataclass
@@ -45,22 +47,18 @@ class AppConfig:
     project: ProjectConfig = field(default_factory=ProjectConfig)
 
 
-def _apply_overrides(cfg: AppConfig, raw: dict) -> AppConfig:
-    if "model" in raw:
-        for k, v in raw["model"].items():
-            setattr(cfg.model, k, v)
-    if "bash" in raw:
-        for k, v in raw["bash"].items():
-            setattr(cfg.bash, k, v)
-    if "ui" in raw:
-        for k, v in raw["ui"].items():
-            setattr(cfg.ui, k, v)
-    if "prompt" in raw:
-        for k, v in raw["prompt"].items():
-            setattr(cfg.prompt, k, v)
-    if "project" in raw:
-        for k, v in raw["project"].items():
-            setattr(cfg.project, k, v)
+_KNOWN_SECTIONS = {"model": ModelConfig, "bash": BashConfig, "ui": UIConfig,
+                   "prompt": PromptConfig, "project": ProjectConfig}
+
+
+def _apply_overrides(cfg: AppConfig, raw: dict[str, Any]) -> AppConfig:
+    for section_name, section_data in raw.items():
+        target = getattr(cfg, section_name, None)
+        if target is None:
+            continue
+        for k, v in section_data.items():
+            if hasattr(target, k):
+                setattr(target, k, v)
     return cfg
 
 
@@ -68,6 +66,11 @@ def load_config(config_dir: Path) -> AppConfig:
     cfg = AppConfig()
     config_path = config_dir / "config.toml"
     if config_path.exists():
-        raw = tomllib.loads(config_path.read_text())
-        cfg = _apply_overrides(cfg, raw)
+        try:
+            raw = tomllib.loads(config_path.read_text())
+            cfg = _apply_overrides(cfg, raw)
+        except (tomllib.TOMLDecodeError, OSError) as e:
+            import sys
+            print(f"Warning: failed to parse {config_path}: {e}", file=sys.stderr)
+            print("Using default configuration.", file=sys.stderr)
     return cfg

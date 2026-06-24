@@ -6,16 +6,16 @@ from prompt_toolkit.styles import Style
 from pathlib import Path
 
 from aicoder.cli.renderer import StreamRenderer
-from aicoder.cli.commands import CommandHandler
+from aicoder.cli.commands import CommandHandler, ModelCompleter
 from aicoder.cli.permission_gate import PermissionGate
 from aicoder.cli.session import SessionManager
 from aicoder.config.loader import AppConfig
 from aicoder.config.permissions import PermissionManager
+from aicoder.config.skills import SkillManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
 from aicoder.agent.models import list_models, get_model_info
-from aicoder.cli.commands import ModelCompleter
-from aicoder.config.skills import SkillManager
+from aicoder.util import project_hash, RECURSION_LIMIT
 
 
 STYLE = Style.from_dict({
@@ -31,14 +31,11 @@ def exit_app(event):
     event.app.exit()
 
 
-def _project_hash(project_root: str) -> str:
-    import hashlib
-    return hashlib.sha256(str(Path(project_root).resolve()).encode()).hexdigest()[:12]
-
-
-def _rebuild_agent(cfg, project_root, state_db, model_name, skill_paths=None):
-    """Recreate agent with a different model and/or skills."""
-    return create_agent(cfg, project_root, state_db, model_name=model_name, skill_paths=skill_paths)
+def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                   model_name, skill_paths=None):
+    return create_agent(cfg, project_root, bash_session, state_db,
+                        store_db_path=store_db, model_name=model_name,
+                        skill_paths=skill_paths)
 
 
 def run_repl(
@@ -47,7 +44,7 @@ def run_repl(
     project_root: str,
     thread_id: str | None = None,
 ):
-    ph = _project_hash(project_root)
+    ph = project_hash(project_root)
     sessions_dir = config_dir / "sessions"
 
     sm = SessionManager(sessions_dir)
@@ -58,17 +55,18 @@ def run_repl(
         thread_id = sm.create_session(ph)
 
     state_db = sm.get_state_db_path(ph, thread_id)
+    store_db = sm.get_store_db_path(ph, thread_id)
 
-    init_bash_session(project_root, cfg.ui.max_output_lines)
+    bash_session = init_bash_session(project_root, cfg.ui.max_output_lines)
 
-    # Skills
     pkg_dir = Path(__file__).resolve().parent.parent
     skill_mgr = SkillManager(config_dir, pkg_dir)
     skill_paths = skill_mgr.resolve_paths(project_root)
 
     current_model = cfg.model.name
-    agent = create_agent(cfg, project_root, state_db,
-                         model_name=current_model, skill_paths=skill_paths)
+    agent = create_agent(cfg, project_root, bash_session, state_db,
+                         store_db_path=store_db, model_name=current_model,
+                         skill_paths=skill_paths)
 
     cmd_handler = CommandHandler(sm, str(sessions_dir), ph, thread_id)
     cmd_handler.set_model(current_model)
@@ -78,8 +76,7 @@ def run_repl(
     model_info = get_model_info(current_model)
     model_display = model_info["display"] if model_info else current_model
     print(f"Starting aicoder (project: {project_root}, session: {thread_id}, model: {model_display})")
-    skill_count = len(skill_mgr.discover(project_root))
-    print(f"Skills loaded: {skill_count}")
+    print(f"Skills loaded: {len(skill_mgr.discover(project_root))}")
     print("Type /help for commands.\n")
 
     history_path = config_dir / "history" / f"{ph}.txt"
@@ -96,7 +93,10 @@ def run_repl(
         completer=completer,
     )
 
-    langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
+    langgraph_config = {
+        "configurable": {"thread_id": thread_id},
+        RECURSION_LIMIT: RECURSION_LIMIT,
+    }
 
     while True:
         try:
@@ -114,7 +114,6 @@ def run_repl(
                 print("Goodbye.")
                 break
 
-            # Check if model changed
             new_model = cmd_handler.current_model
             skills_changed = "/skill install" in user_input or "/skill remove" in user_input
 
@@ -127,10 +126,10 @@ def run_repl(
                     current_model = new_model
                     print(f"  {old_name} -> {new_name}")
                 skill_paths = skill_mgr.resolve_paths(project_root)
-                agent = _rebuild_agent(cfg, project_root, state_db, current_model, skill_paths)
+                agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                                       current_model, skill_paths)
                 completer.set_skill_names([s.name for s in skill_mgr.discover(project_root)])
 
-            # Handle /model without args: enter interactive selection
             if result and result.startswith("\n  Current:"):
                 print(result)
                 try:
@@ -139,7 +138,6 @@ def run_repl(
                         completer=ModelCompleter(),
                     ).strip()
                     if choice:
-                        # Try number first
                         models = list_models()
                         if choice.isdigit() and 1 <= int(choice) <= len(models):
                             choice = models[int(choice) - 1]
@@ -150,7 +148,8 @@ def run_repl(
                             new_name = new_info["display"] if new_info else choice
                             cmd_handler.set_model(choice)
                             current_model = choice
-                            agent = _rebuild_agent(cfg, project_root, state_db, current_model)
+                            agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                                                   current_model, skill_paths)
                             print(f"  Switched: {old_name} -> {new_name}")
                         else:
                             print(f"  Unknown model: {choice}")
@@ -162,13 +161,11 @@ def run_repl(
                 print(result)
             continue
 
-        # Check model sync
         if cmd_handler.current_model != current_model:
             current_model = cmd_handler.current_model
-            skill_paths = skill_mgr.resolve_paths(project_root)
-            agent = _rebuild_agent(cfg, project_root, state_db, current_model, skill_paths)
+            agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                                   current_model, skill_paths)
 
-        # Run the async invoke loop
         try:
             asyncio.run(
                 _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
@@ -179,7 +176,6 @@ def run_repl(
 
 
 async def _async_invoke_with_stream(agent, user_input, config, gate, renderer, max_retries=5):
-    """Invoke agent with streaming; handle interrupt + approval."""
     from langgraph.types import Command
 
     next_input = {"messages": [{"role": "user", "content": user_input}]}
@@ -191,14 +187,10 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer, m
             return
         except Exception as e:
             error_msg = str(e)
-            if "interrupt" not in error_msg.lower():
-                if "LangGraphInterrupt" in type(e).__name__:
-                    pass  # handle below
-                else:
-                    renderer.print_error(f"[Error: {error_msg}]")
-                    return
+            if "interrupt" not in error_msg.lower() and "LangGraphInterrupt" not in type(e).__name__:
+                renderer.print_error(f"[Error: {error_msg}]")
+                return
 
-        # Handle interrupt
         state = agent.get_state(config)
         interrupts = []
         if state and hasattr(state, "tasks") and state.tasks:
@@ -207,9 +199,7 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer, m
                     interrupts.extend(task.interrupts)
 
         if not interrupts:
-            # Try LangGraphInterrupt
-            if hasattr(e, "__cause__"):
-                renderer.print_error(f"[Interrupt: {error_msg[:100]}]")
+            renderer.print_error(f"[Interrupt: {error_msg[:100]}]")
             return
 
         for interrupt in interrupts:

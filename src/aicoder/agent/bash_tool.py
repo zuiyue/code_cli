@@ -1,6 +1,5 @@
 import os
 import subprocess
-import shlex
 from pathlib import Path
 from langchain.tools import tool
 
@@ -16,10 +15,16 @@ class BashSession:
         return str(self._cwd)
 
     def run(self, command: str, timeout: int = 120000) -> str:
+        if not command or not command.strip():
+            return "(no command)"
+
         timeout_sec = timeout / 1000.0
+
+        # Fold cwd tracking into a single execution to avoid double side-effects
+        wrapped = f"cd {self._cwd} && {{ {command}; }}; echo __CWD__:$PWD"
         try:
             result = subprocess.run(
-                ["/bin/bash", "-c", command],
+                ["/bin/bash", "-c", wrapped],
                 capture_output=True,
                 text=True,
                 timeout=timeout_sec,
@@ -29,25 +34,20 @@ class BashSession:
         except subprocess.TimeoutExpired:
             return f"[Command timed out after {timeout_sec}s]"
 
-        output = result.stdout
-        if result.stderr:
-            output += result.stderr
+        output = result.stdout or ""
+        stderr = result.stderr or ""
 
-        # Track cwd changes: run the command prefixed with cd to current dir
-        track_cwd = f"cd {shlex.quote(str(self._cwd))} && {command} && pwd"
-        try:
-            cwd_result = subprocess.run(
-                ["/bin/bash", "-c", track_cwd],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                cwd=str(self._cwd),
-            )
-            new_cwd = cwd_result.stdout.strip()
+        # Split __CWD__ marker to extract cwd
+        if "__CWD__:" in output:
+            idx = output.rindex("__CWD__:")
+            cwd_line = output[idx + len("__CWD__:"):]
+            new_cwd = cwd_line.split("\n")[0].strip()
+            output = output[:idx]
             if new_cwd and new_cwd.startswith(str(self._root)):
                 self._cwd = Path(new_cwd)
-        except Exception:
-            pass
+
+        if stderr:
+            output = (output.rstrip() + "\n" + stderr.rstrip()).strip()
 
         # Truncate output
         lines = output.split("\n")
@@ -59,23 +59,16 @@ class BashSession:
         return output if output else "(no output)"
 
 
-_session: BashSession | None = None
+def init_bash_session(root: str, max_output_lines: int = 500) -> BashSession:
+    """Create and return a new BashSession. Caller keeps the reference."""
+    return BashSession(root, max_output_lines)
 
 
-def init_bash_session(root: str, max_output_lines: int = 500):
-    global _session
-    _session = BashSession(root, max_output_lines)
-
-
-def create_bash_tool(project_root: str):
-    global _session
-    if _session is None:
-        _session = BashSession(project_root)
-
+def create_bash_tool(session: BashSession):
+    """Create a bash tool bound to a specific BashSession instance."""
     @tool
     def bash(command: str, timeout: int = 120000) -> str:
         """Execute a bash command in the project directory. Returns stdout+stderr."""
-        global _session
-        return _session.run(command, timeout=timeout)
+        return session.run(command, timeout=timeout)
 
     return bash

@@ -7,7 +7,6 @@ ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
 
 
 class ModelCompleter(Completer):
-    """Tab-completion for commands with context-aware completions."""
     def __init__(self):
         self._models = list_models()
         self._skill_names: list[str] = []
@@ -37,12 +36,12 @@ class ModelCompleter(Completer):
 
 
 class CommandHandler:
-    def __init__(self, session_manager=None, sessions_dir="",
-                 project_hash="", thread_id=""):
+    def __init__(self, session_manager=None, sessions_dir=None,
+                 project_hash=None, thread_id=None):
         self._sm = session_manager
-        self._sessions_dir = sessions_dir
-        self._project_hash = project_hash
-        self._thread_id = thread_id
+        self._sessions_dir = sessions_dir or ""
+        self._project_hash = project_hash or ""
+        self._thread_id = thread_id or ""
         self._current_model = "deepseek-chat"
         self._skill_manager = None
         self._project_root = "."
@@ -69,24 +68,20 @@ class CommandHandler:
         arg = parts[1] if len(parts) > 1 else ""
         arg2 = parts[2] if len(parts) > 2 else ""
 
-        if cmd == "/help":
-            return self._help()
-        elif cmd == "/clear":
-            return self._clear()
-        elif cmd == "/sessions":
-            return self._sessions()
-        elif cmd == "/model":
-            return self._model(arg)
-        elif cmd == "/models":
-            return self._list_models()
-        elif cmd == "/skills":
-            return self._list_skills()
-        elif cmd == "/skill":
-            return self._skill(arg, arg2)
-        elif cmd == "/exit":
-            return "exit"
-        else:
-            return f"Unknown command: {cmd}. Type /help for available commands."
+        handlers = {
+            "/help": self._help,
+            "/clear": self._clear,
+            "/sessions": self._sessions,
+            "/model": lambda: self._model(arg),
+            "/models": self._list_models,
+            "/skills": self._list_skills,
+            "/skill": lambda: self._skill(arg, arg2),
+            "/exit": lambda: "exit",
+        }
+        handler = handlers.get(cmd)
+        if handler:
+            return handler()
+        return f"Unknown command: {cmd}. Type /help for available commands."
 
     def _help(self) -> str:
         return (
@@ -135,8 +130,7 @@ class CommandHandler:
             return "\n".join(lines)
 
         if arg not in list_models():
-            avail = ", ".join(list_models())
-            return f"Unknown model: {arg}\nAvailable: {avail}"
+            return f"Unknown model: {arg}\nAvailable: {', '.join(list_models())}"
 
         self._current_model = arg
         info = get_model_info(arg)
@@ -158,8 +152,8 @@ class CommandHandler:
             return "No skills installed. Use /skill install <git-url> to add one."
         lines = ["Installed skills:"]
         for s in skills:
-            src_label = {"builtin": "[builtin]", "user": "[user]", "project": "[project]"}.get(s.source, "")
-            lines.append(f"  {s.name:25s} {src_label:10s} {s.description[:60]}")
+            src = {"builtin": "[builtin]", "user": "[user]", "project": "[project]"}.get(s.source, "")
+            lines.append(f"  {s.name:25s} {src:10s} {s.description[:60]}")
         return "\n".join(lines)
 
     def _skill(self, arg: str, arg2: str) -> str:
@@ -167,21 +161,18 @@ class CommandHandler:
             return "Skill manager not available."
 
         if arg == "install":
-            url = arg2
-            if not url:
+            if not arg2:
                 return "Usage: /skill install <git-url>"
-            ok, msg = self._skill_manager.install(url)
+            _, msg = self._skill_manager.install(arg2)
             return msg
 
         elif arg == "remove":
-            name = arg2
-            if not name:
+            if not arg2:
                 return "Usage: /skill remove <name>"
-            ok, msg = self._skill_manager.remove(name)
+            _, msg = self._skill_manager.remove(arg2)
             return msg
 
         elif arg:
-            # Show skill details
             content = self._skill_manager.read_skill_md(arg, self._project_root)
             if content:
                 return f"\n{content}"
