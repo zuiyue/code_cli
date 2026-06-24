@@ -13,6 +13,10 @@ def get_config_dir() -> Path:
 
 
 def main():
+    # Disable LangSmith tracing to avoid config key iteration bug
+    if "LANGSMITH_TRACING" not in os.environ:
+        os.environ["LANGSMITH_TRACING"] = "false"
+
     models = list_models()
     parser = argparse.ArgumentParser(description="AI-powered terminal coding assistant")
     parser.add_argument("--project", "-p", default=".", help="Project root directory")
