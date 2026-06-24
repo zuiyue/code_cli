@@ -94,9 +94,11 @@ def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                         skill_paths=skill_paths)
 
 
-def _resolve_image(cmd_result: str) -> tuple[str, str] | None:
+def _resolve_image(cmd_result) -> tuple[str, str] | None:
     """Parse command result for image. Returns (b64, mime) or None."""
-    if cmd_result and cmd_result.startswith("__IMAGE_FILE__"):
+    if not isinstance(cmd_result, str):
+        return None
+    if cmd_result.startswith("__IMAGE_FILE__"):
         path = cmd_result[len("__IMAGE_FILE__"):]
         b64, mime = read_image(path)
         print(f"  Image: {path} ({len(b64)//1024}KB, {mime})")
@@ -178,7 +180,10 @@ def run_repl(
         image_mime = None
 
         try:
-            user_input = session.prompt([("class:prompt", "> ")]).strip()
+            raw = session.prompt([("class:prompt", "> ")])
+            if not isinstance(raw, str):
+                continue
+            user_input = raw.strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye.")
             break
@@ -260,7 +265,7 @@ def run_repl(
                                        current_model, skill_paths)
                 completer.set_skill_names([s.name for s in skill_mgr.discover(project_root)])
 
-            if result and result.startswith("\n  Current:"):
+            if isinstance(result, str) and result.startswith("\n  Current:"):
                 print(result)
                 try:
                     choice = session.prompt(
