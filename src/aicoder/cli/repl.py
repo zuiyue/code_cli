@@ -72,18 +72,18 @@ def _ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
 
     # Find first vision model with an available API key
     tried = []
+    chosen = None
     for name, info in MODEL_REGISTRY.items():
         if not info.get("vision"):
             continue
         env_key = info.get("env_key", "")
-        if env_key and os.environ.get(env_key):
-            chosen = name
-            break
-        if cfg.model.api_key and info.get("api_base"):
+        key = os.environ.get(env_key, "")
+        if env_key and key:
             chosen = name
             break
         tried.append(name)
-    else:
+
+    if not chosen:
         avail = ", ".join(tried)
         keys_needed = {MODEL_REGISTRY[n].get("env_key", "") for n in tried if n in MODEL_REGISTRY}
         raise RuntimeError(
