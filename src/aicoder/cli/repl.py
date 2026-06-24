@@ -37,11 +37,13 @@ def exit_app(event):
 
 @bindings.add("c-i")
 def screenshot(event):
-    """Ctrl+I: take interactive screenshot, insert /image path into prompt."""
-    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
-                   check=False, timeout=30, capture_output=True)
-    if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-        event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+    """Ctrl+I: interactive screenshot, insert /image path when done."""
+    def _after_screenshot():
+        subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
+                       check=False, capture_output=True)
+        if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
+            event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+    event.app.run_in_terminal(_after_screenshot)
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
