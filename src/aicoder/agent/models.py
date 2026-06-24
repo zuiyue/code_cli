@@ -4,19 +4,34 @@ from langchain_openai import ChatOpenAI
 
 # Monkey-patch httpx to filter non-ASCII headers (prompt_toolkit causes Unicode leak)
 _original_headers_init = httpx.Headers.__init__
+
 def _safe_headers_init(self, headers=None, encoding=None):
-    if headers:
-        if isinstance(headers, dict):
-            items = list(headers.items())
-        else:
-            items = list(headers)
-        cleaned = []
-        for k, v in items:
-            if isinstance(v, str):
-                v = v.encode("ascii", errors="replace").decode("ascii")
-            cleaned.append((k, v))
-        headers = cleaned
+    try:
+        if headers is not None:
+            if isinstance(headers, dict):
+                clean = {}
+                for k, v in headers.items():
+                    if isinstance(v, str):
+                        v = v.encode("ascii", errors="replace").decode("ascii")
+                    clean[k] = v
+                headers = clean
+            elif isinstance(headers, (list, tuple)):
+                clean = []
+                for item in headers:
+                    if isinstance(item, (list, tuple)) and len(item) == 2:
+                        k, v = item
+                        if isinstance(v, str):
+                            v = v.encode("ascii", errors="replace").decode("ascii")
+                        clean.append((k, v))
+                    elif isinstance(item, (list, tuple)):
+                        clean.append(tuple(item[:2]))
+                    else:
+                        clean.append(item)
+                headers = clean
+    except Exception:
+        pass
     return _original_headers_init(self, headers, encoding=encoding)
+
 httpx.Headers.__init__ = _safe_headers_init
 
 # Try optional imports for other providers
