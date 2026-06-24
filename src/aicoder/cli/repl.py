@@ -91,20 +91,24 @@ def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
 
 
 def _resolve_image(cmd_result) -> tuple[str, str] | None:
-    """Parse command result for image. Returns (b64, mime) or None."""
+    """Parse command result for image. Returns (b64, mime, description) or None."""
     if not isinstance(cmd_result, str):
         return None
     if cmd_result.startswith("__IMAGE_FILE__"):
-        path = cmd_result[len("__IMAGE_FILE__"):]
+        payload = cmd_result[len("__IMAGE_FILE__"):]
+        if "|" in payload:
+            path, desc = payload.split("|", 1)
+        else:
+            path, desc = payload, ""
         b64, mime = read_image(path)
         print(f"  Image: {path} ({len(b64)//1024}KB, {mime})")
-        return b64, mime
+        return (b64, mime, desc)
     elif cmd_result == "__IMAGE_CLIPBOARD__":
         result = read_clipboard_image()
         if result:
             b64, mime = result
             print(f"  Image from clipboard ({len(b64)//1024}KB, {mime})")
-            return b64, mime
+            return (b64, mime, "")
         else:
             print("  No image found in clipboard")
             return None
@@ -225,14 +229,17 @@ def run_repl(
             # Check for /image command
             img = _resolve_image(result) if result else None
             if img:
-                # /image triggers next interactive prompt for description
-                try:
-                    desc = session.prompt(
-                        [("class:prompt", "  describe> ")],
-                    ).strip()
-                except (EOFError, KeyboardInterrupt):
-                    print("  Cancelled.")
-                    continue
+                b64, mime, desc = img
+
+                # Only prompt for description if user didn't provide one
+                if not desc:
+                    try:
+                        desc = session.prompt(
+                            [("class:prompt", "  describe> ")],
+                        ).strip()
+                    except (EOFError, KeyboardInterrupt):
+                        print("  Cancelled.")
+                        continue
 
                 if not desc:
                     desc = "Analyze this image"
@@ -243,7 +250,7 @@ def run_repl(
                 )
                 cmd_handler.set_model(current_model)
 
-                msg = _build_multimodal_message(desc, img[0], img[1])
+                msg = _build_multimodal_message(desc, b64, mime)
                 try:
                     asyncio.run(
                         _async_invoke_with_stream(agent, None, langgraph_config,

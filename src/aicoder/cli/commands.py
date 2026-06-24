@@ -76,7 +76,7 @@ class CommandHandler:
             "/models": self._list_models,
             "/skills": self._list_skills,
             "/skill": lambda: self._skill(arg, arg2),
-            "/image": lambda: self._image(arg),
+            "/image": lambda: self._image(f"{arg} {arg2}".strip()),
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -183,6 +183,13 @@ class CommandHandler:
         return "Usage: /skill <name> | /skill install <url> | /skill remove <name>"
 
     def _image(self, arg: str) -> str:
+        """Return image file path. Description in arg2 handled by REPL."""
         if not arg:
             return "__IMAGE_CLIPBOARD__"
-        return f"__IMAGE_FILE__{arg}"
+        # Split path from optional description
+        parts = arg.split(None, 1)
+        path = parts[0]
+        desc = parts[1] if len(parts) > 1 else ""
+        if desc:
+            return f"__IMAGE_FILE__{path}|{desc}"
+        return f"__IMAGE_FILE__{path}"
