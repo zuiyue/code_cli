@@ -5,7 +5,6 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
-from prompt_toolkit.application import run_in_terminal
 from pathlib import Path
 
 from aicoder.cli.renderer import StreamRenderer
@@ -37,17 +36,16 @@ def exit_app(event):
 
 
 SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
+SCREENSHOT_FLAG = "/tmp/aicoder_screenshot.flag"
 
 
 @bindings.add("f2")
 def screenshot(event):
-    """F2: interactive screenshot, insert /image path into buffer."""
+    """F2: interactive screenshot. Flag file indicates pending image."""
     subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
                    check=False, stderr=subprocess.DEVNULL)
     if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-        buf = event.app.current_buffer
-        buf.text += f"/image {SCREENSHOT_TMP} "
-        buf.cursor_position = len(buf.text)
+        Path(SCREENSHOT_FLAG).touch()
         event.app.invalidate()
 
 
@@ -182,6 +180,16 @@ def run_repl(
             if not isinstance(raw, str):
                 continue
             user_input = raw.strip()
+
+            # Check for pending screenshot (set by F2 key binding)
+            if Path(SCREENSHOT_FLAG).exists():
+                Path(SCREENSHOT_FLAG).unlink()
+                if Path(SCREENSHOT_TMP).exists():
+                    tag = f"/image {SCREENSHOT_TMP}"
+                    if user_input:
+                        user_input = f"{tag} {user_input}"
+                    else:
+                        user_input = tag
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye.")
             break
