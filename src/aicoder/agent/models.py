@@ -104,6 +104,7 @@ def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0
             api_key=key,
             base_url=info["api_base"],
             temperature=temperature,
+            default_headers={"Accept": "application/json"},
         )
     elif info["provider"] == "anthropic":
         if ChatAnthropic is None:

@@ -284,6 +284,9 @@ def run_repl(
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
+                print()
+                continue
+
             # Existing command handling
             new_model = cmd_handler.current_model
             skills_changed = "/skill install" in user_input or "/skill remove" in user_input
