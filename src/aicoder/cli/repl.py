@@ -187,9 +187,7 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer, m
     for retry in range(max_retries):
         try:
             events = agent.astream_events(next_input, config=config, version="v2")
-            final = await renderer.render_stream(events)
-            if final:
-                renderer.print_response(final)
+            await renderer.render_stream(events)
             return
         except Exception as e:
             error_msg = str(e)
