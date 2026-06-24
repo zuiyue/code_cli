@@ -282,8 +282,7 @@ def run_repl(
                                                    gate, renderer, prebuilt_message=msg)
                     )
                 except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                    renderer.print_error(f"[Error: {e}]")
                 print()
                 continue
 
@@ -365,6 +364,7 @@ def run_repl(
 async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
                                      max_retries=5, prebuilt_message: dict | None = None):
     from langgraph.types import Command
+    import asyncio as _asyncio
 
     if prebuilt_message:
         next_input = {"messages": [prebuilt_message]}
@@ -379,7 +379,13 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
         except Exception as e:
             error_msg = str(e)
             if "interrupt" not in error_msg.lower() and "LangGraphInterrupt" not in type(e).__name__:
-                raise  # Re-raise to let caller handle with traceback
+                if "Connection" in type(e).__name__ or "Connect" in type(e).__name__ or "nodename" in error_msg:
+                    if retry < max_retries - 1:
+                        await _asyncio.sleep(1.0)
+                        continue
+                raise
+
+        ...  # Re-raise to let caller handle with traceback
 
         state = agent.get_state(config)
         interrupts = []
