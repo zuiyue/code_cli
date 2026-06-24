@@ -57,7 +57,7 @@ def run_repl(
     agent = create_agent(cfg, project_root, state_db)
 
     cmd_handler = CommandHandler(sm, str(sessions_dir), ph, thread_id)
-    renderer = StreamRenderer()
+    renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking)
 
     history_path = config_dir / "history" / f"{ph}.txt"
     history_path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,58 +89,69 @@ def run_repl(
             continue
 
         config = {"configurable": {"thread_id": thread_id}}
-        try:
-            events = agent.astream_events(
-                {"messages": [{"role": "user", "content": user_input}]},
-                config=config,
-                version="v2",
-            )
-            final_text = renderer.render(events, show_thinking=cfg.ui.show_thinking)
-            if final_text:
-                print(f"\n{final_text}")
-        except Exception as e:
-            error_msg = str(e)
-            if "interrupt" in error_msg.lower():
-                _handle_interrupt(error_msg, agent, config, gate, renderer, cfg)
-            else:
-                print(f"\n[Error: {error_msg}]")
+
+        # Invoke agent; handle interrupts for bash approval
+        result = _invoke_with_interrupts(agent, user_input, config, gate)
+        if result is not None:
+            messages = result.get("messages", [])
+            if messages:
+                last_msg = messages[-1]
+                content = getattr(last_msg, "content", str(last_msg))
+                renderer.print_response(content)
         print()
 
 
-def _handle_interrupt(error_msg, agent, config, gate, renderer, cfg):
-    print(f"\n[Interrupt: bash command needs approval]")
-    state = agent.get_state(config)
-    interrupts = []
-    if state and hasattr(state, "tasks") and state.tasks:
-        for task in state.tasks:
-            if hasattr(task, "interrupts"):
-                interrupts.extend(task.interrupts)
-
+def _invoke_with_interrupts(agent, user_input, config, gate, max_retries=5):
+    """Invoke agent; if bash interrupt fires, get approval + resume and return final result."""
     from langgraph.types import Command
 
-    for interrupt in interrupts:
-        tool_input = {}
-        if hasattr(interrupt, "value") and isinstance(interrupt.value, dict):
-            tool_input = interrupt.value.get("input", {})
-        command = tool_input.get("command", str(tool_input))
+    next_input = {"messages": [{"role": "user", "content": user_input}]}
 
-        if gate.is_denied(command):
-            agent.invoke(Command(resume={"decision": "deny"}), config)
-            print(f"[Denied: {command[:80]}]")
-            continue
+    for _ in range(max_retries):
+        try:
+            return agent.invoke(next_input, config=config)
+        except Exception as e:
+            error_msg = str(e)
+            if "interrupt" not in error_msg.lower():
+                print(f"\n[Error: {error_msg}]")
+                return None
 
-        if not gate.needs_approval(command):
-            agent.invoke(Command(resume={"decision": "allow"}), config)
-            continue
+        # Handle interrupt
+        state = agent.get_state(config)
+        interrupts = []
+        if state and hasattr(state, "tasks") and state.tasks:
+            for task in state.tasks:
+                if hasattr(task, "interrupts"):
+                    interrupts.extend(task.interrupts)
 
-        print(f"\n  Bash command: {command[:200]}")
-        decision = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
+        if not interrupts:
+            return None
 
-        if decision == "a":
-            gate.allow_always(command)
-            agent.invoke(Command(resume={"decision": "allow"}), config)
-        elif decision == "y":
-            gate.allow_session(command)
-            agent.invoke(Command(resume={"decision": "allow"}), config)
-        else:
-            agent.invoke(Command(resume={"decision": "deny"}), config)
+        for interrupt in interrupts:
+            tool_input = {}
+            if hasattr(interrupt, "value") and isinstance(interrupt.value, dict):
+                tool_input = interrupt.value.get("input", {})
+            command = tool_input.get("command", str(tool_input))
+
+            if gate.is_denied(command):
+                print(f"[Denied: {command[:80]}]")
+                next_input = Command(resume={"decision": "deny"})
+                continue
+
+            if not gate.needs_approval(command):
+                next_input = Command(resume={"decision": "allow"})
+                continue
+
+            print(f"\n  Bash command: {command[:200]}")
+            decision = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
+
+            if decision == "a":
+                gate.allow_always(command)
+                next_input = Command(resume={"decision": "allow"})
+            elif decision == "y":
+                gate.allow_session(command)
+                next_input = Command(resume={"decision": "allow"})
+            else:
+                next_input = Command(resume={"decision": "deny"})
+
+    return None
