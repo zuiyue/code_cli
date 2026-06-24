@@ -1,4 +1,5 @@
 import os
+import sqlite3
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -25,11 +26,20 @@ def create_agent(
         {**general_subagent},
     ]
 
-    checkpointer = SqliteSaver.from_conn_string(state_db_path)
+    # SqliteSaver.from_conn_string returns a context manager; use direct connection
+    db_path = os.path.dirname(state_db_path)
+    if db_path:
+        os.makedirs(db_path, exist_ok=True)
+    conn = sqlite3.connect(state_db_path, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
 
     kwargs = {}
     if store_db_path:
-        store = SqliteStore.from_conn_string(store_db_path)
+        store_db_path_dir = os.path.dirname(store_db_path)
+        if store_db_path_dir:
+            os.makedirs(store_db_path_dir, exist_ok=True)
+        store_conn = sqlite3.connect(store_db_path, check_same_thread=False)
+        store = SqliteStore(store_conn)
         kwargs["store"] = store
 
     api_key = cfg.model.api_key or os.environ.get("DEEPSEEK_API_KEY", "")
