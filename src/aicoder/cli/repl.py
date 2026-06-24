@@ -38,13 +38,15 @@ def exit_app(event):
 SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 
-@bindings.add("c-i")
+@bindings.add("f2")
 def screenshot(event):
-    """Ctrl+I: interactive screenshot, insert /image path into buffer."""
+    """F2: interactive screenshot, insert /image path."""
     subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
                    check=False, stderr=subprocess.DEVNULL)
     if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-        event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+        buf = event.app.current_buffer
+        buf.insert_text(f"/image {SCREENSHOT_TMP} ")
+        event.app.invalidate()
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:

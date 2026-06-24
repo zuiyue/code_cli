@@ -96,7 +96,7 @@ class CommandHandler:
             "  /skill <name>      Show skill details\n"
             "  /skill install <url>  Install skill from git\n"
             "  /skill remove <name>  Remove installed skill\n"
-            "  /image [path]      Attach an image (Ctrl+I to screenshot)\n"
+            "  /image [path]      Attach an image (F2 to screenshot)\n"
             "  /exit              Exit"
         )
 
