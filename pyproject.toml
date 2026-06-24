@@ -1,0 +1,28 @@
+[project]
+name = "aicoder"
+version = "0.1.0"
+description = "A terminal AI coding assistant powered by Deep Agents"
+requires-python = ">=3.11"
+dependencies = [
+    "deepagents",
+    "langgraph-checkpoint-sqlite",
+    "langchain-anthropic",
+    "langchain-core",
+    "prompt-toolkit>=3.0",
+    "rich>=13.0",
+    "tomli>=2.0",
+    "tomli-w>=1.0",
+]
+
+[project.scripts]
+aicoder = "aicoder.main:main"
+
+[project.optional-dependencies]
+test = ["pytest", "pexpect"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
