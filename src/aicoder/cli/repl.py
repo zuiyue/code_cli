@@ -38,11 +38,10 @@ def exit_app(event):
 @bindings.add("c-i")
 def screenshot(event):
     """Ctrl+I: take interactive screenshot, insert /image path into prompt."""
-    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP], check=False, timeout=30)
+    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
+                   check=False, timeout=30, capture_output=True)
     if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
         event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
-    else:
-        print("\n  (screenshot cancelled)")
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
@@ -166,20 +165,8 @@ def run_repl(
     }
 
     while True:
-        # Check clipboard for image before each prompt
         image_b64 = None
         image_mime = None
-
-        if has_clipboard_image():
-            try:
-                answer = input("  Image in clipboard. Attach? [y/N] ").strip().lower()
-                if answer == "y":
-                    result = read_clipboard_image()
-                    if result:
-                        image_b64, image_mime = result
-                        print(f"  Attached ({len(image_b64)//1024}KB, {image_mime})")
-            except (EOFError, KeyboardInterrupt):
-                pass
 
         try:
             user_input = session.prompt([("class:prompt", "> ")]).strip()
@@ -188,7 +175,25 @@ def run_repl(
             break
 
         if not user_input:
-            continue
+            # Empty input: check clipboard for image
+            if has_clipboard_image():
+                result = read_clipboard_image()
+                if result:
+                    image_b64, image_mime = result
+                    print(f"  Image from clipboard ({len(image_b64)//1024}KB, {image_mime})")
+                    try:
+                        user_input = session.prompt(
+                            [("class:prompt", "  describe> ")],
+                        ).strip()
+                    except (EOFError, KeyboardInterrupt):
+                        continue
+                    if not user_input:
+                        continue
+                else:
+                    print("  No image in clipboard")
+                    continue
+            else:
+                continue
 
         # Handle commands
         if cmd_handler.is_command(user_input):

@@ -73,7 +73,8 @@ def has_clipboard_image() -> bool:
             ["osascript", "-e", 'clipboard info'],
             capture_output=True, text=True, timeout=5,
         )
-        return "PNG" in result.stdout or "picture" in result.stdout
+        stdout = result.stdout or ""
+        return "PNG" in stdout or "picture" in stdout
     except Exception:
         return False
 
