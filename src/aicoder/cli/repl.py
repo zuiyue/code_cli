@@ -40,13 +40,21 @@ SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 @bindings.add("f2")
 def screenshot(event):
-    """F2: interactive screenshot, insert /image path."""
-    subprocess.run(["screencapture", "-i", SCREENSHOT_TMP],
-                   check=False, stderr=subprocess.DEVNULL)
-    if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
-        buf = event.app.current_buffer
-        buf.insert_text(f"/image {SCREENSHOT_TMP} ")
-        event.app.invalidate()
+    """F2: interactive screenshot, properly restoring terminal state."""
+
+    async def _do():
+        # suspend prompt_toolkit, run in raw terminal, then restore
+        await event.app.run_in_terminal(
+            lambda: subprocess.run(
+                ["screencapture", "-i", SCREENSHOT_TMP],
+                check=False, stderr=subprocess.DEVNULL,
+            )
+        )
+        if Path(SCREENSHOT_TMP).exists() and Path(SCREENSHOT_TMP).stat().st_size > 0:
+            event.app.current_buffer.insert_text(f"/image {SCREENSHOT_TMP} ")
+            event.app.invalidate()
+
+    event.app.create_background_task(_do())
 
 
 def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
