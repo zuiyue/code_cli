@@ -211,15 +211,12 @@ def run_repl(
                 continue
             user_input = raw.strip()
 
-            # Check for pending screenshot (set by F2 key binding)
-            if Path(SCREENSHOT_FLAG).exists():
+            # Check for pending screenshot flag (only for non-command input)
+            if not user_input.startswith("/") and Path(SCREENSHOT_FLAG).exists():
                 Path(SCREENSHOT_FLAG).unlink()
                 if Path(SCREENSHOT_TMP).exists():
                     tag = f"/image {SCREENSHOT_TMP}"
-                    if user_input:
-                        user_input = f"{tag} {user_input}"
-                    else:
-                        user_input = tag
+                    user_input = f"{tag} {user_input}" if user_input else tag
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye.")
             break
