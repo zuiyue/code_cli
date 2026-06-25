@@ -1,27 +1,6 @@
 import os
-import sys
 import httpx
 from langchain_openai import ChatOpenAI
-
-# Patch httpx to debug connection errors  
-_original_connect_tcp = None
-def _debug_connect(kwargs):
-    import traceback
-    print(f"[httpx DEBUG] connect to {kwargs.get('host', '?')}:{kwargs.get('port', '?')}", file=sys.stderr)
-    traceback.print_stack(limit=3, file=sys.stderr)
-
-try:
-    from httpcore._backends.anyio import AnyIOBackend
-    _original_connect_tcp = AnyIOBackend.connect_tcp
-    async def _patched_connect_tcp(self, host, port, local_address=None, **kw):
-        try:
-            return await _original_connect_tcp(self, host, port, local_address, **kw)
-        except Exception as e:
-            print(f"[httpx DEBUG] connect FAILED: {host}:{port} -> {e}", file=sys.stderr)
-            raise
-    AnyIOBackend.connect_tcp = _patched_connect_tcp
-except Exception:
-    pass
 
 # Monkey-patch httpx to filter non-ASCII headers (prompt_toolkit causes Unicode leak)
 _original_headers_init = httpx.Headers.__init__
