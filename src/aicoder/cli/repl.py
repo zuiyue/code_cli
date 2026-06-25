@@ -288,8 +288,7 @@ def run_repl(
                                                    gate, renderer, prebuilt_message=msg)
                     )
                 except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                    renderer.print_error(f"[Error: {e}]")
                 print()
                 continue
 
