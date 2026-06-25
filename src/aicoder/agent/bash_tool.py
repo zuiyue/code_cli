@@ -5,10 +5,11 @@ from langchain.tools import tool
 
 
 class BashSession:
-    def __init__(self, root: str, max_output_lines: int = 500):
+    def __init__(self, root: str, max_output_lines: int = 500, approver=None):
         self._root = Path(root).absolute()
         self._cwd = self._root
         self.max_output_lines = max_output_lines
+        self._approver = approver  # callable(command, cwd) -> bool
 
     @property
     def cwd(self) -> str:
@@ -17,6 +18,10 @@ class BashSession:
     def run(self, command: str, timeout: int = 120000) -> str:
         if not command or not command.strip():
             return "(no command)"
+
+        # Approval gate
+        if self._approver and not self._approver(command, str(self._cwd)):
+            return "[Denied]"
 
         timeout_sec = timeout / 1000.0
 

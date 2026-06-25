@@ -144,7 +144,26 @@ def run_repl(
     state_db = sm.get_state_db_path(ph, thread_id)
     store_db = sm.get_store_db_path(ph, thread_id)
 
-    bash_session = BashSession(project_root, cfg.ui.max_output_lines)
+    def _bash_approver(command: str, cwd: str) -> bool:
+        """Permission check: returns True if command is allowed."""
+        if gate.is_denied(command):
+            print(f"  [Denied: {command[:80]}]")
+            return False
+        if not gate.needs_approval(command):
+            return True
+        print(f"\n  Bash: {command[:150]}")
+        print(f"  CWD:   {cwd}")
+        decision = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
+        if decision == "a":
+            gate.allow_always(command)
+            return True
+        if decision == "y":
+            gate.allow_session(command)
+            return True
+        return False
+
+    bash_session = BashSession(project_root, cfg.ui.max_output_lines,
+                               approver=_bash_approver)
 
     pkg_dir = Path(__file__).resolve().parent.parent
     skill_mgr = SkillManager(config_dir, pkg_dir)
