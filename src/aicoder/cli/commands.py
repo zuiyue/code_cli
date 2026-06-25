@@ -264,15 +264,23 @@ class CommandHandler:
         if action == "list":
             servers = self._mcp_client.list_servers()
             if not servers:
-                return "No MCP servers connected.\nUse /mcp connect <command> [args...]"
+                return "No MCP servers connected.\nUse /mcp connect <name> <command> [args...]"
             lines = ["Connected MCP servers:"]
             for s in servers:
                 lines.append(f"  {s['name']}: {s['command']} ({s['tools']} tools)")
             return "\n".join(lines)
         elif action == "connect":
-            return "Usage: /mcp connect <command> [args...] (e.g. /mcp connect npx -y @modelcontextprotocol/server-filesystem /tmp)"
+            # arg = "name command args..."
+            parts = arg.split(None, 1) if arg else []
+            if len(parts) < 2:
+                return "Usage: /mcp connect <name> <command> [args...]\nExample: /mcp connect fs npx -y @modelcontextprotocol/server-filesystem /tmp"
+            name = parts[0]
+            cmd_parts = parts[1].split()
+            command = cmd_parts[0]
+            args = cmd_parts[1:] if len(cmd_parts) > 1 else []
+            return f"__MCP__CONNECT__{name}|{command}|{' '.join(args)}"
         elif action == "disconnect":
-            return "Usage: /mcp disconnect <server-name>"
+            return f"__MCP__DISCONNECT__{arg}"
         return "Usage: /mcp [list|connect|disconnect]"
 
     def _image(self, arg: str) -> str:

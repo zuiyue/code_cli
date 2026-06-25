@@ -313,6 +313,37 @@ def run_repl(
                 print()
                 continue
 
+            # Handle MCP connect/disconnect
+            if result and result.startswith("__MCP__CONNECT__"):
+                payload = result[len("__MCP__CONNECT__"):]
+                name, rest = payload.split("|", 1)
+                cmd_parts = rest.split("|")
+                command = cmd_parts[0]
+                args = cmd_parts[1].split() if len(cmd_parts) > 1 and cmd_parts[1] else []
+                try:
+                    tools = loop.run_until_complete(mcp_client.connect_server(name, command, args))
+                    extra_mcp_tools = mcp_client.build_langchain_tools()
+                    agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                                           current_model, skill_paths, extra_tools=extra_mcp_tools)
+                    print(f"  MCP connected: {name} ({len(tools)} tools)")
+                    for t in tools:
+                        print(f"    - {t.name}")
+                except Exception as e:
+                    print(f"  MCP connect failed: {e}")
+                continue
+
+            if result and result.startswith("__MCP__DISCONNECT__"):
+                name = result[len("__MCP__DISCONNECT__"):]
+                try:
+                    loop.run_until_complete(mcp_client.disconnect_server(name))
+                    extra_mcp_tools = mcp_client.build_langchain_tools()
+                    agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                                           current_model, skill_paths, extra_tools=extra_mcp_tools)
+                    print(f"  MCP disconnected: {name}")
+                except Exception as e:
+                    print(f"  MCP disconnect failed: {e}")
+                continue
+
             # Existing command handling
             new_model = cmd_handler.current_model
             skills_changed = "/skill install" in user_input or "/skill remove" in user_input
