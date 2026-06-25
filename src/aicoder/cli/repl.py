@@ -21,6 +21,8 @@ from aicoder.agent.images import read_image, has_clipboard_image, read_clipboard
 from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
 from aicoder.agent.stats import TokenTracker
 from aicoder.agent.mcp_client import MCPClient
+from aicoder.cli.runtime import (ensure_vision_model, resolve_image, rebuild_agent,
+                                  invoke_stream, set_project_root)
 from aicoder.util import project_hash, RECURSION_LIMIT_KEY, RECURSION_LIMIT
 
 
@@ -71,59 +73,10 @@ def screenshot(event):
 
 
 
-def _ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
-                          state_db, store_db, skill_paths):
-    """Auto-switch to vision model if needed."""
-    if supports_vision(current_model):
-        return agent, current_model
-
-    chosen = pick_vision_model()
-    if not chosen:
-        raise RuntimeError(
-            "No vision model with API key found.\n"
-            "  Set ZHIPUAI_API_KEY for GLM-4V or OPENAI_API_KEY for GPT-4o."
-        )
-
-    old_display = describe_model(current_model)
-    new_display = describe_model(chosen)
-    print(f"  Auto-switch: {old_display} -> {new_display} (image support)")
-
-    new_agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
-                                chosen, skill_paths)
-    return new_agent, chosen
 
 
-def _resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
-    """Parse image command result. Returns (ImageAttachment, description) or None."""
-    if not isinstance(cmd_result, str):
-        return None
-    if cmd_result.startswith("__IMAGE_FILE__"):
-        payload = cmd_result[len("__IMAGE_FILE__"):]
-        if "|" in payload:
-            path, desc = payload.split("|", 1)
-        else:
-            path, desc = payload, ""
-        try:
-            img = ImageAttachment(*read_image(path), source=path)
-        except ImageError as e:
-            print(f"  {e}")
-            return None
-        print(f"  Image: {path} ({img.size_kb}KB, {img.mime})")
-        return (img, desc)
-    elif cmd_result == "__IMAGE_CLIPBOARD__":
-        result = read_clipboard_image()
-        if result:
-            b64, mime = result
-            img = ImageAttachment(b64, mime, source="clipboard")
-            print(f"  Image from clipboard ({img.size_kb}KB, {img.mime})")
-            return (img, "")
     return None
 
-def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
-                   model_name, skill_paths=None, extra_tools=None):
-    return create_agent(cfg, project_root, bash_session, state_db,
-                        store_db_path=store_db, model_name=model_name,
-                        skill_paths=skill_paths, extra_tools=extra_tools)
 
 
 def run_repl(
@@ -132,6 +85,7 @@ def run_repl(
     project_root: str,
     thread_id: str | None = None,
 ):
+    set_project_root(project_root)
     ph = project_hash(project_root)
     sessions_dir = config_dir / "sessions"
 
@@ -274,7 +228,7 @@ def run_repl(
                 break
 
             # Check for /image command
-            img = _resolve_image(result) if result else None
+            img = resolve_image(result) if result else None
             if img:
                 image_attachment, desc = img
 
@@ -292,7 +246,7 @@ def run_repl(
                     desc = "Analyze this image"
 
                 try:
-                    agent, current_model = _ensure_vision_model(
+                    agent, current_model = ensure_vision_model(
                         agent, cfg, current_model, project_root, bash_session,
                         state_db, store_db, skill_paths,
                     )
@@ -305,7 +259,7 @@ def run_repl(
                 msg = image_attachment.build_message(desc)
                 try:
                     loop.run_until_complete(
-                        _async_invoke_with_stream(agent, None, langgraph_config,
+                        invoke_stream(agent, None, langgraph_config,
                                                    gate, renderer, prebuilt_message=msg)
                     )
                 except Exception as e:
@@ -323,7 +277,7 @@ def run_repl(
                 try:
                     tools = loop.run_until_complete(mcp_client.connect_server(name, command, args))
                     extra_mcp_tools = mcp_client.build_langchain_tools()
-                    agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                    agent = rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                                            current_model, skill_paths, extra_tools=extra_mcp_tools)
                     print(f"  MCP connected: {name} ({len(tools)} tools)")
                     for t in tools:
@@ -337,7 +291,7 @@ def run_repl(
                 try:
                     loop.run_until_complete(mcp_client.disconnect_server(name))
                     extra_mcp_tools = mcp_client.build_langchain_tools()
-                    agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                    agent = rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                                            current_model, skill_paths, extra_tools=extra_mcp_tools)
                     print(f"  MCP disconnected: {name}")
                 except Exception as e:
@@ -357,7 +311,7 @@ def run_repl(
                     current_model = new_model
                     print(f"  {old_name} -> {new_name}")
                 skill_paths = skill_mgr.resolve_paths(project_root)
-                agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                agent = rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                                        current_model, skill_paths)
                 completer.set_skill_names([s.name for s in skill_mgr.discover(project_root)])
 
@@ -379,7 +333,7 @@ def run_repl(
                             new_name = new_info["display"] if new_info else choice
                             cmd_handler.set_model(choice)
                             current_model = choice
-                            agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                            agent = rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                                                    current_model, skill_paths)
                             print(f"  Switched: {old_name} -> {new_name}")
                         else:
@@ -395,103 +349,26 @@ def run_repl(
         # Regular text message (with optional image from clipboard detection)
         if cmd_handler.current_model != current_model:
             current_model = cmd_handler.current_model
-            agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+            agent = rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                                    current_model, skill_paths)
 
         try:
             if clipboard_img is not None:
-                agent, current_model = _ensure_vision_model(
+                agent, current_model = ensure_vision_model(
                     agent, cfg, current_model, project_root, bash_session,
                     state_db, store_db, skill_paths,
                 )
                 cmd_handler.set_model(current_model)
                 msg = clipboard_img.build_message(user_input)
                 loop.run_until_complete(
-                    _async_invoke_with_stream(agent, None, langgraph_config,
+                    invoke_stream(agent, None, langgraph_config,
                                                gate, renderer, prebuilt_message=msg)
                 )
             else:
                 loop.run_until_complete(
-                    _async_invoke_with_stream(agent, user_input, langgraph_config, gate, renderer)
+                    invoke_stream(agent, user_input, langgraph_config, gate, renderer)
                 )
         except Exception as e:
             renderer.print_error(f"[Error: {e}]")
         print()
 
-
-async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
-                                     max_retries=5, prebuilt_message: dict | None = None):
-    from langgraph.types import Command
-    import asyncio as _asyncio
-
-    if prebuilt_message:
-        next_input = {"messages": [prebuilt_message]}
-    else:
-        next_input = {"messages": [{"role": "user", "content": user_input}]}
-
-    for retry in range(max_retries):
-        try:
-            events = agent.astream_events(next_input, config=config, version="v2")
-            await renderer.render_stream(events)
-
-            # Check for HITL interrupt after stream completes
-            state = None
-            try: state = agent.get_state(config)
-            except Exception: pass
-            interrupts = []
-            if state and hasattr(state, "tasks") and state.tasks:
-                for task in state.tasks:
-                    if hasattr(task, "interrupts"):
-                        interrupts.extend(task.interrupts)
-
-            if not interrupts:
-                return  # Normal completion
-
-            # Handle interrupt — show diff, get decision, resume
-            for interrupt in interrupts:
-                val = getattr(interrupt, "value", None)
-                if not isinstance(val, dict):
-                    next_input = Command(resume={"decisions": [{"type": "approve"}]})
-                    continue
-
-                action_requests = val.get("action_requests", [])
-                if not action_requests:
-                    next_input = Command(resume={"decisions": [{"type": "approve"}]})
-                    continue
-
-                for ar in action_requests:
-                    tool_name = ar.get("name", "")
-                    args = ar.get("args", {})
-                    file_path = args.get("file_path", "")
-                    content = args.get("content", "")
-
-                    if tool_name in ("write_file", "edit_file") and file_path:
-                        from aicoder.agent.diff import show_diff
-                        print(show_diff(file_path, content))
-                        d = input("  Write? [y]es / [n]o: ").strip().lower()
-                        next_input = Command(resume={"decisions": [{"type": "approve" if d == "y" else "reject"}]})
-                    elif tool_name == "bash":
-                        command = args.get("command", "")
-                        if gate.is_denied(command):
-                            print(f"  [Denied: {command[:80]}]")
-                            next_input = Command(resume={"decisions": [{"type": "reject"}]})
-                        elif not gate.needs_approval(command):
-                            next_input = Command(resume={"decisions": [{"type": "approve"}]})
-                        else:
-                            print(f"\n  Bash: {command[:150]}")
-                            d = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
-                            if d == "a": gate.allow_always(command)
-                            elif d == "y": gate.allow_session(command)
-                            next_input = Command(resume={"decisions": [{"type": "approve" if d in ("y","a") else "reject"}]})
-                    else:
-                        next_input = Command(resume={"decisions": [{"type": "approve"}]})
-
-            # Continue the loop with the resume Command
-
-        except Exception as e:
-            error_msg = str(e)
-            if "Connection" in type(e).__name__ or "Connect" in type(e).__name__ or "nodename" in error_msg:
-                if retry < max_retries - 1:
-                    await _asyncio.sleep(1.0)
-                    continue
-            raise
