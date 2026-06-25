@@ -20,6 +20,7 @@ def create_agent(
     store_db_path: str | None = None,
     model_name: str | None = None,
     skill_paths: list[str] | None = None,
+    extra_tools: list | None = None,
 ):
     system_prompt = build_system_prompt(cfg, project_root)
     bash_tool = create_bash_tool(bash_session)
@@ -46,10 +47,14 @@ def create_agent(
     if skill_paths is None:
         skill_paths = ["./skills/"]
 
+    all_tools = [bash_tool]
+    if extra_tools:
+        all_tools.extend(extra_tools)
+
     agent = create_deep_agent(
         name="aicoder",
         model=model,
-        tools=[bash_tool],
+        tools=all_tools,
         system_prompt=system_prompt,
         subagents=subagents,
         backend=FilesystemBackend(root_dir=project_root, virtual_mode=False),

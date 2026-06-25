@@ -20,6 +20,7 @@ from aicoder.agent.models import list_models, get_model_info, supports_vision
 from aicoder.agent.images import read_image as _read_image_raw, has_clipboard_image, read_clipboard_image, ImageError
 from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
 from aicoder.agent.stats import TokenTracker
+from aicoder.agent.mcp_client import MCPClient
 from aicoder.util import project_hash, RECURSION_LIMIT_KEY, RECURSION_LIMIT
 
 
@@ -119,10 +120,10 @@ def _resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
     return None
 
 def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
-                   model_name, skill_paths=None):
+                   model_name, skill_paths=None, extra_tools=None):
     return create_agent(cfg, project_root, bash_session, state_db,
                         store_db_path=store_db, model_name=model_name,
-                        skill_paths=skill_paths)
+                        skill_paths=skill_paths, extra_tools=extra_tools)
 
 
 def run_repl(
@@ -181,6 +182,21 @@ def run_repl(
     token_tracker = TokenTracker()
     cmd_handler.set_token_tracker(token_tracker)
     renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking, tracker=token_tracker)
+
+    # MCP client — connect configured servers
+    mcp_client = MCPClient()
+    cmd_handler.set_mcp_client(mcp_client)
+
+    # Connect to MCP servers from config
+    for server_cfg in cfg.mcp.servers:
+        name = server_cfg.get("name", "mcp")
+        cmd = server_cfg.get("command", "")
+        if cmd:
+            try:
+                loop.run_until_complete(mcp_client.connect_server(name, cmd))
+                print(f"  MCP: {name} connected ({len(mcp_client.list_tools())} tools)")
+            except Exception as e:
+                print(f"  MCP: {name} failed: {e}")
 
     model_info = get_model_info(current_model)
     model_display = model_info["display"] if model_info else current_model
