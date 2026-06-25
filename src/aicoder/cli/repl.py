@@ -368,25 +368,24 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
             return
         except Exception as e:
             error_msg = str(e)
-            if "interrupt" not in error_msg.lower() and "LangGraphInterrupt" not in type(e).__name__:
+            # Check if there's an interrupt to handle (any exception might hide one)
+            state = None
+            try:
+                state = agent.get_state(config)
+            except Exception:
+                pass
+            interrupts = []
+            if state and hasattr(state, "tasks") and state.tasks:
+                for task in state.tasks:
+                    if hasattr(task, "interrupts"):
+                        interrupts.extend(task.interrupts)
+
+            if not interrupts:
                 if "Connection" in type(e).__name__ or "Connect" in type(e).__name__ or "nodename" in error_msg:
                     if retry < max_retries - 1:
                         await _asyncio.sleep(1.0)
                         continue
                 raise
-
-        ...  # Re-raise to let caller handle with traceback
-
-        state = agent.get_state(config)
-        interrupts = []
-        if state and hasattr(state, "tasks") and state.tasks:
-            for task in state.tasks:
-                if hasattr(task, "interrupts"):
-                    interrupts.extend(task.interrupts)
-
-        if not interrupts:
-            renderer.print_error(f"[Interrupt: {error_msg[:100]}]")
-            return
 
         for interrupt in interrupts:
             tool_input = {}
