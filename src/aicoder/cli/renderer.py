@@ -1,4 +1,3 @@
-import threading
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -9,29 +8,8 @@ class StreamRenderer:
     def __init__(self, show_thinking: bool = True):
         self._console = Console()
         self._show_thinking = show_thinking
-        self._spinner_done = threading.Event()
-
-    def _start_spinner(self):
-        """Show a spinner in a background thread. Call _stop_spinner to end."""
-        self._spinner_done.clear()
-        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-        def spin():
-            i = 0
-            while not self._spinner_done.is_set():
-                self._console.print(f"\r  {frames[i % len(frames)]} Thinking...", end="")
-                i += 1
-                self._spinner_done.wait(0.1)
-            self._console.print("\r" + " " * 30 + "\r", end="")  # clear line
-
-        t = threading.Thread(target=spin, daemon=True)
-        t.start()
-
-    def _stop_spinner(self):
-        self._spinner_done.set()
 
     def print_tool_call(self, name: str, input_str: str):
-        self._stop_spinner()
         self._console.print(Panel(
             Text(f"{input_str[:200]}", style="dim"),
             title=f"[bold yellow]{name}[/bold yellow]",
@@ -52,7 +30,6 @@ class StreamRenderer:
         ))
 
     def print_thinking(self, text: str):
-        self._stop_spinner()
         if self._show_thinking and text.strip():
             self._console.print(Panel(
                 Text(text.strip()[-400:], style="blue"),
@@ -62,29 +39,25 @@ class StreamRenderer:
             ))
 
     def print_response(self, text: str):
-        self._stop_spinner()
         if text:
+            self._console.print()
             self._console.print(Markdown(text))
 
     def print_error(self, text: str):
-        self._stop_spinner()
-        self._console.print(f"[red]{text}[/red]")
+        self._console.print(f"\n[red]{text}[/red]")
 
     def print_info(self, text: str):
-        self._stop_spinner()
         self._console.print(f"[dim]{text}[/dim]")
 
     def render_stream(self, events):
-        """Render streaming events inline with panels. Auto-manages spinner."""
+        """Render streaming events inline with panels."""
         import inspect
-        self._start_spinner()
-        try:
-            if inspect.isasyncgen(events):
-                return self._render_async_stream(events)
-            else:
-                return self._render_sync_stream(events)
-        finally:
-            self._stop_spinner()
+        # Print empty line for visual separation from prompt
+        self._console.print()
+        if inspect.isasyncgen(events):
+            return self._render_async_stream(events)
+        else:
+            return self._render_sync_stream(events)
 
     def _render_sync_stream(self, events):
         thinking = ""
@@ -93,7 +66,6 @@ class StreamRenderer:
         for event in events:
             kind = event.get("event", "")
             if kind == "on_chat_model_stream":
-                self._stop_spinner()
                 chunk = event.get("data", {}).get("chunk")
                 if chunk and hasattr(chunk, "content") and chunk.content:
                     thinking += chunk.content
@@ -119,13 +91,16 @@ class StreamRenderer:
     async def _render_async_stream(self, events):
         thinking = ""
         final_text = ""
+        started = False
 
         async for event in events:
             kind = event.get("event", "")
             if kind == "on_chat_model_stream":
-                self._stop_spinner()
                 chunk = event.get("data", {}).get("chunk")
                 if chunk and hasattr(chunk, "content") and chunk.content:
+                    if not started:
+                        self._console.print("  [dim]Thinking...[/dim]")
+                        started = True
                     thinking += chunk.content
             elif kind == "on_tool_start":
                 name = event.get("name", "")
