@@ -43,6 +43,14 @@ MODEL_REGISTRY = {
         "env_key": "DEEPSEEK_API_KEY",
         "vision": False,
     },
+    "deepseek-v4-pro": {
+        "display": "DeepSeek V4 Pro",
+        "provider": "deepseek",
+        "model": "deepseek-v4-pro",
+        "api_base": "https://api.deepseek.com",
+        "env_key": "DEEPSEEK_API_KEY",
+        "vision": False,
+    },
     "deepseek-reasoner": {
         "display": "DeepSeek Reasoner",
         "provider": "deepseek",
