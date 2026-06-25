@@ -8,6 +8,7 @@ from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_mo
 from aicoder.agent.images import read_image, read_clipboard_image, ImageError
 from aicoder.agent.factory import create_agent
 from aicoder.agent.diff import show_diff
+from aicoder.cli.interrupts import FileWriteHandler, BashApprovalHandler, AutoApproveHandler
 
 # Project root passed by REPL at startup
 _project_root = "."
@@ -130,28 +131,17 @@ async def invoke_stream(agent, user_input, config, gate, renderer,
                 for ar in action_requests:
                     tool_name = ar.get("name", "")
                     args = ar.get("args", {})
-                    file_path = args.get("file_path", "")
-                    content = args.get("content", "")
 
-                    if tool_name in ("write_file", "edit_file") and file_path:
-                        print(show_diff(file_path, content))
-                        d = input("  Write? [y]es / [n]o: ").strip().lower()
-                        next_input = Command(resume={"decisions": [{"type": "approve" if d == "y" else "reject"}]})
-                    elif tool_name == "bash":
-                        command = args.get("command", "")
-                        if gate.is_denied(command):
-                            print(f"  [Denied: {command[:80]}]")
-                            next_input = Command(resume={"decisions": [{"type": "reject"}]})
-                        elif not gate.needs_approval(command):
-                            next_input = Command(resume={"decisions": [{"type": "approve"}]})
-                        else:
-                            print(f"\n  Bash: {command[:150]}")
-                            d = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
-                            if d == "a": gate.allow_always(command)
-                            elif d == "y": gate.allow_session(command)
-                            next_input = Command(resume={"decisions": [{"type": "approve" if d in ("y","a") else "reject"}]})
-                    else:
-                        next_input = Command(resume={"decisions": [{"type": "approve"}]})
+                    # Strategy pattern: find the first handler that can handle this
+                    handlers = [
+                        FileWriteHandler(),
+                        BashApprovalHandler(gate),
+                        AutoApproveHandler(),
+                    ]
+                    for h in handlers:
+                        if h.can_handle(tool_name, args):
+                            next_input = Command(resume=h.handle(tool_name, args))
+                            break
 
         except Exception as e:
             error_msg = str(e)
