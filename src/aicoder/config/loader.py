@@ -33,6 +33,11 @@ class PromptConfig:
 
 
 @dataclass
+class MCPConfig:
+    servers: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class ProjectConfig:
     root: str = "."
     auto_load_agents_md: bool = True
@@ -44,6 +49,7 @@ class AppConfig:
     bash: BashConfig = field(default_factory=BashConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     prompt: PromptConfig = field(default_factory=PromptConfig)
+    mcp: MCPConfig = field(default_factory=MCPConfig)
     project: ProjectConfig = field(default_factory=ProjectConfig)
 
 

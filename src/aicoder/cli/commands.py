@@ -3,7 +3,8 @@ from prompt_toolkit.completion import Completer, Completion
 
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
-                "/skills", "/skill", "/image", "/stats", "/export", "/exit"]
+                "/skills", "/skill", "/image", "/stats", "/export",
+                "/mcp", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -48,6 +49,7 @@ class CommandHandler:
         self._token_tracker = None
         self._export_agent = None
         self._export_config = None
+        self._mcp_client = None
 
     @property
     def current_model(self) -> str:
@@ -66,6 +68,9 @@ class CommandHandler:
     def set_export_context(self, agent, langgraph_config):
         self._export_agent = agent
         self._export_config = langgraph_config
+
+    def set_mcp_client(self, client):
+        self._mcp_client = client
 
     def is_command(self, text: str) -> bool:
         return text.strip().startswith("/")
@@ -89,6 +94,7 @@ class CommandHandler:
             "/image": lambda: self._image(arg),
             "/stats": self._stats,
             "/export": lambda: self._export(arg),
+            "/mcp": lambda: self._mcp(arg, arg2),
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -112,6 +118,8 @@ class CommandHandler:
             "  /image [path]      Attach an image (F2 to screenshot)\n"
             "  /stats             Show token usage statistics\n"
             "  /export [format]   Export conversation (md/json)\n"
+            "  /mcp list          List MCP servers\n"
+            "  /mcp connect <cmd> Connect MCP server\n"
             "  /exit              Exit"
         )
 
@@ -249,6 +257,23 @@ class CommandHandler:
         path = export_dir / f"session_{timestamp}.md"
         path.write_text("\n".join(lines))
         return f"Exported: {path}"
+
+    def _mcp(self, action: str, arg: str) -> str:
+        if not self._mcp_client:
+            return "MCP client not available."
+        if action == "list":
+            servers = self._mcp_client.list_servers()
+            if not servers:
+                return "No MCP servers connected.\nUse /mcp connect <command> [args...]"
+            lines = ["Connected MCP servers:"]
+            for s in servers:
+                lines.append(f"  {s['name']}: {s['command']} ({s['tools']} tools)")
+            return "\n".join(lines)
+        elif action == "connect":
+            return "Usage: /mcp connect <command> [args...] (e.g. /mcp connect npx -y @modelcontextprotocol/server-filesystem /tmp)"
+        elif action == "disconnect":
+            return "Usage: /mcp disconnect <server-name>"
+        return "Usage: /mcp [list|connect|disconnect]"
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""
