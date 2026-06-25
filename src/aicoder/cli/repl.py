@@ -31,6 +31,12 @@ STYLE = Style.from_dict({
 bindings = KeyBindings()
 
 
+@bindings.add("escape", "enter")
+def insert_newline(event):
+    """Escape+Enter inserts a newline for multi-line input."""
+    event.current_buffer.insert_text("\n")
+
+
 @bindings.add("c-d")
 def exit_app(event):
     event.app.exit()

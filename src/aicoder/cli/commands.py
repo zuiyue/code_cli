@@ -92,6 +92,7 @@ class CommandHandler:
     def _help(self) -> str:
         return (
             "Commands:\n"
+            "  Esc+Enter          Insert newline for multi-line input\n"
             "  /help              Show this help\n"
             "  /clear             Clear current session\n"
             "  /sessions          List saved sessions\n"
