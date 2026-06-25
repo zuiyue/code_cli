@@ -3,7 +3,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
-                "/skills", "/skill", "/image", "/exit"]
+                "/skills", "/skill", "/image", "/stats", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -45,6 +45,7 @@ class CommandHandler:
         self._current_model = "deepseek-chat"
         self._skill_manager = None
         self._project_root = "."
+        self._token_tracker = None
 
     @property
     def current_model(self) -> str:
@@ -56,6 +57,9 @@ class CommandHandler:
     def set_skill_manager(self, skill_manager, project_root: str):
         self._skill_manager = skill_manager
         self._project_root = project_root
+
+    def set_token_tracker(self, tracker):
+        self._token_tracker = tracker
 
     def is_command(self, text: str) -> bool:
         return text.strip().startswith("/")
@@ -76,7 +80,8 @@ class CommandHandler:
             "/models": self._list_models,
             "/skills": self._list_skills,
             "/skill": lambda: self._skill(arg, arg2),
-            "/image": lambda: self._image(f"{arg} {arg2}".strip()),
+            "/image": lambda: self._image(arg),
+            "/stats": self._stats,
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -97,6 +102,7 @@ class CommandHandler:
             "  /skill install <url>  Install skill from git\n"
             "  /skill remove <name>  Remove installed skill\n"
             "  /image [path]      Attach an image (F2 to screenshot)\n"
+            "  /stats             Show token usage statistics\n"
             "  /exit              Exit"
         )
 
@@ -181,6 +187,11 @@ class CommandHandler:
             return f"Skill '{arg}' not found."
 
         return "Usage: /skill <name> | /skill install <url> | /skill remove <name>"
+
+    def _stats(self) -> str:
+        if self._token_tracker:
+            return self._token_tracker.summary()
+        return "No usage data yet."
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""

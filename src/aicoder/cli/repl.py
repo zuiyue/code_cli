@@ -19,6 +19,7 @@ from aicoder.agent.bash_tool import init_bash_session
 from aicoder.agent.models import list_models, get_model_info, supports_vision, MODEL_REGISTRY
 from aicoder.agent.images import read_image as _read_image_raw, has_clipboard_image, read_clipboard_image, ImageError
 from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
+from aicoder.agent.stats import TokenTracker
 from aicoder.util import project_hash, RECURSION_LIMIT_KEY, RECURSION_LIMIT
 
 
@@ -138,7 +139,8 @@ def _resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
     cmd_handler = CommandHandler(sm, str(sessions_dir), ph, thread_id)
     cmd_handler.set_model(current_model)
     cmd_handler.set_skill_manager(skill_mgr, project_root)
-    renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking)
+    token_tracker = TokenTracker()
+    renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking, tracker=token_tracker)
 
     model_info = get_model_info(current_model)
     model_display = model_info["display"] if model_info else current_model
