@@ -213,6 +213,8 @@ def run_repl(
         RECURSION_LIMIT_KEY: RECURSION_LIMIT,
     }
 
+    cmd_handler.set_export_context(agent, langgraph_config)
+
     while True:
         clipboard_img = None
 

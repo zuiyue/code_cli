@@ -3,7 +3,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
-                "/skills", "/skill", "/image", "/stats", "/exit"]
+                "/skills", "/skill", "/image", "/stats", "/export", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -46,6 +46,8 @@ class CommandHandler:
         self._skill_manager = None
         self._project_root = "."
         self._token_tracker = None
+        self._export_agent = None
+        self._export_config = None
 
     @property
     def current_model(self) -> str:
@@ -60,6 +62,10 @@ class CommandHandler:
 
     def set_token_tracker(self, tracker):
         self._token_tracker = tracker
+
+    def set_export_context(self, agent, langgraph_config):
+        self._export_agent = agent
+        self._export_config = langgraph_config
 
     def is_command(self, text: str) -> bool:
         return text.strip().startswith("/")
@@ -82,6 +88,7 @@ class CommandHandler:
             "/skill": lambda: self._skill(arg, arg2),
             "/image": lambda: self._image(arg),
             "/stats": self._stats,
+            "/export": lambda: self._export(arg),
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -104,6 +111,7 @@ class CommandHandler:
             "  /skill remove <name>  Remove installed skill\n"
             "  /image [path]      Attach an image (F2 to screenshot)\n"
             "  /stats             Show token usage statistics\n"
+            "  /export [format]   Export conversation (md/json)\n"
             "  /exit              Exit"
         )
 
@@ -193,6 +201,54 @@ class CommandHandler:
         if self._token_tracker:
             return self._token_tracker.summary()
         return "No usage data yet."
+
+    def _export(self, fmt: str) -> str:
+        if not self._export_agent:
+            return "Export not available."
+
+        fmt = (fmt or "md").lower()
+        if fmt not in ("md", "json"):
+            return "Usage: /export [md|json]"
+
+        import json, os
+        from datetime import datetime
+        from pathlib import Path
+
+        try:
+            state = self._export_agent.get_state(self._export_config)
+            msgs = state.values.get("messages", []) if state else []
+        except Exception:
+            return "Could not read conversation state."
+
+        if not msgs:
+            return "No messages to export."
+
+        export_dir = Path(os.path.expanduser("~/.aicoder/exports"))
+        export_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if fmt == "json":
+            data = {"messages": [{"role": getattr(m, "type", "unknown"),
+                                  "content": getattr(m, "content", str(m))} for m in msgs]}
+            path = export_dir / f"session_{timestamp}.json"
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+            return f"Exported: {path}"
+
+        # Markdown
+        lines = ["# Conversation Export\n"]
+        for m in msgs:
+            role = getattr(m, "type", "unknown")
+            content = getattr(m, "content", str(m))
+            if role == "human":
+                lines.append(f"## You\n\n{content}\n")
+            elif role == "ai":
+                if content:
+                    lines.append(f"## Assistant\n\n{content}\n")
+            elif role == "tool" and content:
+                lines.append(f"> Tool: {content[:200]}\n")
+        path = export_dir / f"session_{timestamp}.md"
+        path.write_text("\n".join(lines))
+        return f"Exported: {path}"
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""
