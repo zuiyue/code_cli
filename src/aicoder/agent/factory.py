@@ -53,7 +53,7 @@ def create_agent(
         system_prompt=system_prompt,
         subagents=subagents,
         backend=FilesystemBackend(root_dir=project_root, virtual_mode=False),
-        interrupt_on={"bash": True},  # HITL: pause before every bash command
+        interrupt_on={},
         skills=skill_paths,
         checkpointer=checkpointer,
         **kwargs,
