@@ -391,6 +391,15 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
                 next_input = Command(resume={"decision": "deny"})
 
     renderer.print_error("[Max retries exceeded]")
+
+
+def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
+                   model_name, skill_paths=None):
+    return create_agent(cfg, project_root, bash_session, state_db,
+                        store_db_path=store_db, model_name=model_name,
+                        skill_paths=skill_paths)
+
+
 def run_repl(
     cfg: AppConfig,
     config_dir: Path,
