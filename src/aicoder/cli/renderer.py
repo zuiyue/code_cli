@@ -10,8 +10,10 @@ class StreamRenderer:
         self._show_thinking = show_thinking
         self.last_token_usage: dict | None = None
         self._tracker = tracker
+        self._had_output = False
 
     def print_tool_call(self, name: str, input_str: str):
+        self._had_output = True
         self._console.print(Panel(
             Text(f"{input_str[:200]}", style="dim"),
             title=f"[bold yellow]{name}[/bold yellow]",
@@ -42,6 +44,7 @@ class StreamRenderer:
 
     def print_response(self, text: str, token_info: dict | None = None):
         if text:
+            self._had_output = True
             self._console.print()
             self._console.print(Markdown(text))
         if token_info:
@@ -74,6 +77,7 @@ class StreamRenderer:
     def render_stream(self, events):
         """Render streaming events inline with panels."""
         import inspect
+        self._had_output = False
         # Print empty line for visual separation from prompt
         self._console.print()
         if inspect.isasyncgen(events):
@@ -113,6 +117,8 @@ class StreamRenderer:
             self.print_thinking(thinking)
         if final_text:
             self.print_response(final_text, token_info)
+        elif not self._had_output:
+            self._console.print("  [dim](no output)[/dim]")
         return final_text
 
     async def _render_async_stream(self, events):
@@ -151,4 +157,6 @@ class StreamRenderer:
             self.print_thinking(thinking)
         if final_text:
             self.print_response(final_text, token_info)
+        elif not self._had_output:
+            self._console.print("  [dim](no output)[/dim]")
         return final_text
