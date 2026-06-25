@@ -11,22 +11,9 @@ from aicoder.agent.diff import show_diff
 from aicoder.cli.interrupts import FileWriteHandler, BashApprovalHandler, AutoApproveHandler
 
 # Project root passed by REPL at startup
-_project_root = "."
 
 
-def set_project_root(path: str):
-    global _project_root
-    _project_root = path
-
-
-def _rebuild_agent(bash_session, state_db, store_db,
-                   model_name, skill_paths=None, extra_tools=None):
-    return create_agent(None, _project_root, bash_session, state_db,
-                        store_db_path=store_db, model_name=model_name,
-                        skill_paths=skill_paths, extra_tools=extra_tools)
-
-
-def ensure_vision_model(agent, cfg, current_model, bash_session,
+def ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
                         state_db, store_db, skill_paths):
     """Auto-switch to vision model if needed. Returns (new_agent, new_model_name)."""
     if supports_vision(current_model):
@@ -43,7 +30,7 @@ def ensure_vision_model(agent, cfg, current_model, bash_session,
     new_display = describe_model(chosen)
     print(f"  Auto-switch: {old_display} -> {new_display} (image support)")
 
-    new_agent = rebuild_agent(cfg, bash_session, state_db, store_db,
+    new_agent = rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                               chosen, skill_paths)
     return new_agent, chosen
 
@@ -75,10 +62,10 @@ def resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
     return None
 
 
-def rebuild_agent(cfg, bash_session, state_db, store_db,
+def rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
                   model_name, skill_paths=None, extra_tools=None):
     """Recreate the agent with new model or tools."""
-    return create_agent(cfg, _project_root, bash_session, state_db,
+    return create_agent(cfg, project_root, bash_session, state_db,
                         store_db_path=store_db, model_name=model_name,
                         skill_paths=skill_paths, extra_tools=extra_tools)
 

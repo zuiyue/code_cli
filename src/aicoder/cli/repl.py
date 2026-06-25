@@ -22,7 +22,7 @@ from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_mo
 from aicoder.agent.stats import TokenTracker
 from aicoder.agent.mcp_client import MCPClient
 from aicoder.cli.runtime import (ensure_vision_model, resolve_image, rebuild_agent,
-                                  invoke_stream, set_project_root)
+                                  invoke_stream)
 from aicoder.util import project_hash, RECURSION_LIMIT_KEY, RECURSION_LIMIT
 
 
@@ -85,7 +85,6 @@ def run_repl(
     project_root: str,
     thread_id: str | None = None,
 ):
-    set_project_root(project_root)
     ph = project_hash(project_root)
     sessions_dir = config_dir / "sessions"
 
