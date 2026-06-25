@@ -17,7 +17,8 @@ from aicoder.config.skills import SkillManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import init_bash_session
 from aicoder.agent.models import list_models, get_model_info, supports_vision, MODEL_REGISTRY
-from aicoder.agent.images import read_image, has_clipboard_image, read_clipboard_image, ImageError
+from aicoder.agent.images import read_image as _read_image_raw, has_clipboard_image, read_clipboard_image, ImageError
+from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
 from aicoder.util import project_hash, RECURSION_LIMIT
 
 
@@ -52,50 +53,23 @@ def screenshot(event):
               "  Or use /image <path> to attach an image file.")
 
 
-def _build_multimodal_message(text: str, image_b64: str, mime: str) -> dict:
-    """Build a multimodal user message."""
-    return {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": text or "Analyze this image"},
-            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
-        ],
-    }
 
 
 def _ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
                           state_db, store_db, skill_paths):
-    """If current model lacks vision, auto-switch to one with available API key."""
-    import os
+    """Auto-switch to vision model if needed."""
     if supports_vision(current_model):
         return agent, current_model
 
-    # Find first vision model with an available API key
-    tried = []
-    chosen = None
-    for name, info in MODEL_REGISTRY.items():
-        if not info.get("vision"):
-            continue
-        env_key = info.get("env_key", "")
-        key = os.environ.get(env_key, "")
-        if env_key and key:
-            chosen = name
-            break
-        tried.append(name)
-
+    chosen = pick_vision_model()
     if not chosen:
-        avail = ", ".join(tried)
-        keys_needed = {MODEL_REGISTRY[n].get("env_key", "") for n in tried if n in MODEL_REGISTRY}
         raise RuntimeError(
-            f"No vision model with available API key.\n"
-            f"  Available models: {avail or 'none'}\n"
-            f"  Set one of: {' '.join(keys_needed) if keys_needed else 'OPENAI_API_KEY'}"
+            "No vision model with API key found.\n"
+            "  Set ZHIPUAI_API_KEY for GLM-4V or OPENAI_API_KEY for GPT-4o."
         )
 
-    new_info = get_model_info(chosen)
-    new_display = new_info["display"] if new_info else chosen
-    old_info = get_model_info(current_model)
-    old_display = old_info["display"] if old_info else current_model
+    old_display = describe_model(current_model)
+    new_display = describe_model(chosen)
     print(f"  Auto-switch: {old_display} -> {new_display} (image support)")
 
     new_agent = _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
@@ -103,15 +77,8 @@ def _ensure_vision_model(agent, cfg, current_model, project_root, bash_session,
     return new_agent, chosen
 
 
-def _rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
-                   model_name, skill_paths=None):
-    return create_agent(cfg, project_root, bash_session, state_db,
-                        store_db_path=store_db, model_name=model_name,
-                        skill_paths=skill_paths)
-
-
-def _resolve_image(cmd_result) -> tuple[str, str] | None:
-    """Parse command result for image. Returns (b64, mime, description) or None."""
+def _resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
+    """Parse image command result. Returns (ImageAttachment, description) or None."""
     if not isinstance(cmd_result, str):
         return None
     if cmd_result.startswith("__IMAGE_FILE__"):
@@ -120,27 +87,22 @@ def _resolve_image(cmd_result) -> tuple[str, str] | None:
             path, desc = payload.split("|", 1)
         else:
             path, desc = payload, ""
-        b64, mime = read_image(path)
-        print(f"  Image: {path} ({len(b64)//1024}KB, {mime})")
-        return (b64, mime, desc)
+        try:
+            img = ImageAttachment(*_read_image_raw(path), source=path)
+        except ImageError as e:
+            print(f"  {e}")
+            return None
+        size_kb = img.size_kb
+        print(f"  Image: {path} ({size_kb}KB, {img.mime})")
+        return (img, desc)
     elif cmd_result == "__IMAGE_CLIPBOARD__":
         result = read_clipboard_image()
         if result:
             b64, mime = result
-            print(f"  Image from clipboard ({len(b64)//1024}KB, {mime})")
-            return (b64, mime, "")
-        else:
-            print("  No image found in clipboard")
-            return None
+            img = ImageAttachment(b64, mime, source="clipboard")
+            print(f"  Image from clipboard ({img.size_kb}KB, {img.mime})")
+            return (img, "")
     return None
-
-
-def run_repl(
-    cfg: AppConfig,
-    config_dir: Path,
-    project_root: str,
-    thread_id: str | None = None,
-):
     ph = project_hash(project_root)
     sessions_dir = config_dir / "sessions"
 
@@ -200,8 +162,7 @@ def run_repl(
     }
 
     while True:
-        image_b64 = None
-        image_mime = None
+        clipboard_img: ImageAttachment | None = None
 
         try:
             raw = session.prompt([("class:prompt", "> ")])
@@ -226,8 +187,9 @@ def run_repl(
             if has_clipboard_image():
                 result = read_clipboard_image()
                 if result:
-                    image_b64, image_mime = result
-                    print(f"  Image from clipboard ({len(image_b64)//1024}KB, {image_mime})")
+                    img = ImageAttachment(*result)
+                    clipboard_img = img
+                    print(f"  Image from clipboard ({clipboard_img.size_kb}KB, {clipboard_img.mime})")
                     try:
                         user_input = session.prompt(
                             [("class:prompt", "  describe> ")],
@@ -252,7 +214,7 @@ def run_repl(
             # Check for /image command
             img = _resolve_image(result) if result else None
             if img:
-                b64, mime, desc = img
+                image_attachment, desc = img
 
                 # Only prompt for description if user didn't provide one
                 if not desc:
@@ -278,7 +240,7 @@ def run_repl(
                     print()
                     continue
 
-                msg = _build_multimodal_message(desc, b64, mime)
+                msg = image_attachment.build_message(desc)
                 try:
                     loop.run_until_complete(
                         _async_invoke_with_stream(agent, None, langgraph_config,
@@ -344,13 +306,13 @@ def run_repl(
                                    current_model, skill_paths)
 
         try:
-            if image_b64:
+            if clipboard_img is not None:
                 agent, current_model = _ensure_vision_model(
                     agent, cfg, current_model, project_root, bash_session,
                     state_db, store_db, skill_paths,
                 )
                 cmd_handler.set_model(current_model)
-                msg = _build_multimodal_message(user_input, image_b64, image_mime)
+                msg = clipboard_img.build_message(user_input)
                 loop.run_until_complete(
                     _async_invoke_with_stream(agent, None, langgraph_config,
                                                gate, renderer, prebuilt_message=msg)
