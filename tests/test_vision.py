@@ -3,7 +3,7 @@ import os
 import base64
 from pathlib import Path
 import pytest
-from aicoder.agent.vision import ImageAttachment, read_image, pick_vision_model, supports_vision, describe_model
+from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
 
 
 class TestImageAttachment:
@@ -31,18 +31,18 @@ class TestImageAttachment:
 
 class TestReadImage:
     def test_read_valid_png(self, tmp_path):
-        from aicoder.agent.vision import read_image
+        from aicoder.agent.images import read_image
         p = tmp_path / "test.png"
         png = base64.b64decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
         )
         p.write_bytes(png)
-        img = read_image(p)
-        assert img.mime == "image/png"
-        assert len(img.base64) > 0
+        b64, mime = read_image(p)
+        assert mime == "image/png"
+        assert len(b64) > 0
 
     def test_read_invalid_format(self, tmp_path):
-        from aicoder.agent.vision import read_image
+        from aicoder.agent.images import read_image
         from aicoder.agent.images import ImageError
         p = tmp_path / "test.bmp"
         p.write_text("fake")
@@ -50,7 +50,7 @@ class TestReadImage:
             read_image(p)
 
     def test_read_missing_file(self, tmp_path):
-        from aicoder.agent.vision import read_image
+        from aicoder.agent.images import read_image
         from aicoder.agent.images import ImageError
         with pytest.raises(ImageError):
             read_image(tmp_path / "nonexistent.png")
@@ -78,7 +78,7 @@ class TestModelSelection:
         assert model is None
 
     def test_supports_vision(self):
-        from aicoder.agent.vision import supports_vision
+        from aicoder.agent.models import supports_vision
         assert supports_vision("glm-4v") is True
         assert supports_vision("deepseek-chat") is False
 

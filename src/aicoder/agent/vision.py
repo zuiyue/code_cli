@@ -30,29 +30,6 @@ class ImageAttachment:
         }
 
 
-def read_image(path: str | Path) -> ImageAttachment:
-    """Read an image file and return an ImageAttachment."""
-    from aicoder.agent.images import read_image as _read_image, ImageError
-    p = Path(path)
-    b64, mime = _read_image(p)
-    size_kb = len(b64) // 1024
-    print(f"  Image: {p} ({size_kb}KB, {mime})")
-    return ImageAttachment(b64, mime, source=str(p))
-
-
-def read_clipboard() -> ImageAttachment | None:
-    """Read image from clipboard. Returns None if no image found."""
-    from aicoder.agent.images import read_clipboard_image as _read_clipboard
-    result = _read_clipboard()
-    if not result:
-        print("  No image found in clipboard")
-        return None
-    b64, mime = result
-    size_kb = len(b64) // 1024
-    print(f"  Image from clipboard ({size_kb}KB, {mime})")
-    return ImageAttachment(b64, mime, source="clipboard")
-
-
 def pick_vision_model() -> str | None:
     """Return the first vision model with an available API key."""
     from aicoder.agent.models import MODEL_REGISTRY

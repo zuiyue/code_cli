@@ -17,7 +17,7 @@ from aicoder.config.skills import SkillManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import BashSession
 from aicoder.agent.models import list_models, get_model_info, supports_vision
-from aicoder.agent.images import read_image as _read_image_raw, has_clipboard_image, read_clipboard_image, ImageError
+from aicoder.agent.images import read_image, has_clipboard_image, read_clipboard_image, ImageError
 from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
 from aicoder.agent.stats import TokenTracker
 from aicoder.agent.mcp_client import MCPClient
@@ -104,7 +104,7 @@ def _resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
         else:
             path, desc = payload, ""
         try:
-            img = ImageAttachment(*_read_image_raw(path), source=path)
+            img = ImageAttachment(*read_image(path), source=path)
         except ImageError as e:
             print(f"  {e}")
             return None

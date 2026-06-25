@@ -53,8 +53,6 @@ class AppConfig:
     project: ProjectConfig = field(default_factory=ProjectConfig)
 
 
-_KNOWN_SECTIONS = {"model": ModelConfig, "bash": BashConfig, "ui": UIConfig,
-                   "prompt": PromptConfig, "project": ProjectConfig}
 
 
 def _apply_overrides(cfg: AppConfig, raw: dict[str, Any]) -> AppConfig:

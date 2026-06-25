@@ -5,7 +5,6 @@ from rich.console import Console
 from rich.text import Text
 from rich.panel import Panel
 from rich.syntax import Syntax
-from rich.table import Table
 from rich.columns import Columns as RichColumns
 
 _console = Console()
@@ -49,8 +48,6 @@ def _side_by_side(path: str, old: list[str], new: list[str], max_lines: int) -> 
                 right.append(lnum)
                 right.append(n[:120], style="bold green")
                 right.append("\n")
-                # Also show deleted lines that have no match
-                # Check if old has lines that new doesn't
             elif n is None:
                 left.append(o[:120], style="bold red")
                 left.append("\n")
@@ -113,9 +110,3 @@ def _detect_lang(ext: str) -> str:
         "rb": "ruby", "php": "php", "swift": "swift", "kt": "kotlin",
     }.get(ext, "text")
 
-
-def confirm_write(path: str, content: str) -> bool:
-    show_diff(path, content)
-    _console.print()
-    decision = input("  Write? [y]es / [n]o: ").strip().lower()
-    return decision == "y"
