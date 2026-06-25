@@ -21,7 +21,7 @@ class BashSession:
 
         # Approval gate
         if self._approver and not self._approver(command, str(self._cwd)):
-            return "[Denied]"
+            return "[Denied by user]"
 
         timeout_sec = timeout / 1000.0
 
