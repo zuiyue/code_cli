@@ -183,6 +183,8 @@ def run_repl(
         completer=completer,
     )
 
+    TOOLBAR = " [Esc+Enter] newline  [Ctrl+D] exit  [/help] commands"
+
     # Use a persistent event loop to avoid httpx connection issues
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -196,7 +198,7 @@ def run_repl(
         clipboard_img = None
 
         try:
-            raw = session.prompt([("class:prompt", "> ")])
+            raw = session.prompt([("class:prompt", "> ")], bottom_toolbar=TOOLBAR)
             # prompt_toolkit overwrites the event loop; restore ours
             asyncio.set_event_loop(loop)
             if not isinstance(raw, str):
