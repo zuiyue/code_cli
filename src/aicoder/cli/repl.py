@@ -28,7 +28,6 @@ STYLE = Style.from_dict({
 })
 
 bindings = KeyBindings()
-SCREENSHOT_TMP = "/tmp/aicoder_screenshot.png"
 
 
 @bindings.add("c-d")
@@ -474,13 +473,6 @@ def run_repl(
             if not isinstance(raw, str):
                 continue
             user_input = raw.strip()
-
-            # Check for pending screenshot flag (only for non-command input)
-            if not user_input.startswith("/") and Path(SCREENSHOT_FLAG).exists():
-                Path(SCREENSHOT_FLAG).unlink()
-                if Path(SCREENSHOT_TMP).exists():
-                    tag = f"/image {SCREENSHOT_TMP}"
-                    user_input = f"{tag} {user_input}" if user_input else tag
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye.")
             break
