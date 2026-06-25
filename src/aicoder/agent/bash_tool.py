@@ -21,7 +21,7 @@ class BashSession:
 
         # Approval gate
         if self._approver and not self._approver(command, str(self._cwd)):
-            return "[Denied by user]"
+            return "DENIED_BY_USER: command was refused. DO NOT retry it. Propose an alternative."
 
         timeout_sec = timeout / 1000.0
 
@@ -68,7 +68,7 @@ def create_bash_tool(session: BashSession):
     """Create a bash tool bound to a specific BashSession instance."""
     @tool
     def bash(command: str, timeout: int = 120000) -> str:
-        """Execute a bash command in the project directory. Returns stdout+stderr."""
+        """Execute a bash command. If returns DENIED_BY_USER, STOP and suggest alternative approach."""
         return session.run(command, timeout=timeout)
 
     return bash
