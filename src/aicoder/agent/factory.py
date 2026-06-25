@@ -58,7 +58,7 @@ def create_agent(
         system_prompt=system_prompt,
         subagents=subagents,
         backend=FilesystemBackend(root_dir=project_root, virtual_mode=False),
-        interrupt_on={},  # diff confirm done via bash: 'echo content > file' approval
+        interrupt_on={"write_file": True, "edit_file": True},  # HITL: diff preview before file writes
         skills=skill_paths,
         checkpointer=checkpointer,
         **kwargs,

@@ -433,15 +433,11 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
         try:
             events = agent.astream_events(next_input, config=config, version="v2")
             await renderer.render_stream(events)
-            return
-        except Exception as e:
-            error_msg = str(e)
-            # Check if there's an interrupt to handle (any exception might hide one)
+
+            # Check for HITL interrupt after stream completes
             state = None
-            try:
-                state = agent.get_state(config)
-            except Exception:
-                pass
+            try: state = agent.get_state(config)
+            except Exception: pass
             interrupts = []
             if state and hasattr(state, "tasks") and state.tasks:
                 for task in state.tasks:
@@ -449,48 +445,53 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
                         interrupts.extend(task.interrupts)
 
             if not interrupts:
-                if "Connection" in type(e).__name__ or "Connect" in type(e).__name__ or "nodename" in error_msg:
-                    if retry < max_retries - 1:
-                        await _asyncio.sleep(1.0)
-                        continue
-                raise
+                return  # Normal completion
 
-        for interrupt in interrupts:
-            tool_input = {}
-            if hasattr(interrupt, "value") and isinstance(interrupt.value, dict):
-                tool_input = interrupt.value.get("input", {})
-            command = tool_input.get("command", "")
-
-            # File write/edit — show diff
-            if command == "":
-                file_path = tool_input.get("file_path", "")
-                content = tool_input.get("content", "")
-                if file_path and content is not None:
-                    from aicoder.agent.diff import show_diff
-                    print(show_diff(file_path, content))
-                    d = input("  Write? [y]es / [n]o: ").strip().lower()
-                    next_input = Command(resume={"decision": "allow" if d == "y" else "deny"})
+            # Handle interrupt — show diff, get decision, resume
+            for interrupt in interrupts:
+                val = getattr(interrupt, "value", None)
+                if not isinstance(val, dict):
+                    next_input = Command(resume={"decisions": [{"type": "approve"}]})
                     continue
 
-            # Bash command approval
-                renderer.print_info(f"  [Denied: {command[:80]}]")
-                next_input = Command(resume={"decision": "deny"})
-                continue
+                action_requests = val.get("action_requests", [])
+                if not action_requests:
+                    next_input = Command(resume={"decisions": [{"type": "approve"}]})
+                    continue
 
-            if not gate.needs_approval(command):
-                next_input = Command(resume={"decision": "allow"})
-                continue
+                for ar in action_requests:
+                    tool_name = ar.get("name", "")
+                    args = ar.get("args", {})
+                    file_path = args.get("file_path", "")
+                    content = args.get("content", "")
 
-            print(f"\n  Bash command: {command[:200]}")
-            decision = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
+                    if tool_name in ("write_file", "edit_file") and file_path:
+                        from aicoder.agent.diff import show_diff
+                        print(show_diff(file_path, content))
+                        d = input("  Write? [y]es / [n]o: ").strip().lower()
+                        next_input = Command(resume={"decisions": [{"type": "approve" if d == "y" else "reject"}]})
+                    elif tool_name == "bash":
+                        command = args.get("command", "")
+                        if gate.is_denied(command):
+                            print(f"  [Denied: {command[:80]}]")
+                            next_input = Command(resume={"decisions": [{"type": "reject"}]})
+                        elif not gate.needs_approval(command):
+                            next_input = Command(resume={"decisions": [{"type": "approve"}]})
+                        else:
+                            print(f"\n  Bash: {command[:150]}")
+                            d = input("  Allow? [y]es / [n]o / [a]lways: ").strip().lower()
+                            if d == "a": gate.allow_always(command)
+                            elif d == "y": gate.allow_session(command)
+                            next_input = Command(resume={"decisions": [{"type": "approve" if d in ("y","a") else "reject"}]})
+                    else:
+                        next_input = Command(resume={"decisions": [{"type": "approve"}]})
 
-            if decision == "a":
-                gate.allow_always(command)
-                next_input = Command(resume={"decision": "allow"})
-            elif decision == "y":
-                gate.allow_session(command)
-                next_input = Command(resume={"decision": "allow"})
-            else:
-                next_input = Command(resume={"decision": "deny"})
+            # Continue the loop with the resume Command
 
-    renderer.print_error("[Max retries exceeded]")
+        except Exception as e:
+            error_msg = str(e)
+            if "Connection" in type(e).__name__ or "Connect" in type(e).__name__ or "nodename" in error_msg:
+                if retry < max_retries - 1:
+                    await _asyncio.sleep(1.0)
+                    continue
+            raise
