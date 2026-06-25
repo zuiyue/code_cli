@@ -443,7 +443,10 @@ def run_repl(
     cmd_handler = CommandHandler(sm, str(sessions_dir), ph, thread_id)
     cmd_handler.set_model(current_model)
     cmd_handler.set_skill_manager(skill_mgr, project_root)
-    renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking)
+
+    token_tracker = TokenTracker()
+    cmd_handler.set_token_tracker(token_tracker)
+    renderer = StreamRenderer(show_thinking=cfg.ui.show_thinking, tracker=token_tracker)
 
     model_info = get_model_info(current_model)
     model_display = model_info["display"] if model_info else current_model
