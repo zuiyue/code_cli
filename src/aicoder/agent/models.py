@@ -34,12 +34,6 @@ def _safe_headers_init(self, headers=None, encoding=None):
 
 httpx.Headers.__init__ = _safe_headers_init
 
-# Try optional imports for other providers
-try:
-    from langchain_anthropic import ChatAnthropic
-except ImportError:
-    ChatAnthropic = None
-
 MODEL_REGISTRY = {
     "deepseek-chat": {
         "display": "DeepSeek Chat",
@@ -106,16 +100,6 @@ def supports_vision(model_name: str) -> bool:
     return info.get("vision", False) if info else False
 
 
-def find_vision_model(preferred: str = "gpt-4o") -> str | None:
-    """Find an available vision model, preferring the given one."""
-    if preferred in MODEL_REGISTRY and MODEL_REGISTRY[preferred].get("vision"):
-        return preferred
-    for name, info in MODEL_REGISTRY.items():
-        if info.get("vision"):
-            return name
-    return None
-
-
 def list_models() -> list[str]:
     return list(MODEL_REGISTRY.keys())
 
@@ -138,13 +122,5 @@ def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0
             base_url=info["api_base"],
             temperature=temperature,
         )
-    elif info["provider"] == "anthropic":
-        if ChatAnthropic is None:
-            raise ImportError("langchain-anthropic is required for Anthropic models")
-        return ChatAnthropic(
-            model=info["model"],
-            api_key=key,
-            base_url=info.get("api_base"),
-            temperature=temperature,
-        )
+
     raise ValueError(f"Unknown provider: {info['provider']}")

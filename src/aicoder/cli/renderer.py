@@ -61,6 +61,16 @@ class StreamRenderer:
         if self._tracker and token_info:
             self._tracker.record(token_info)
 
+    def _normalize_tokens(self, usage_meta: dict | None) -> dict | None:
+        """Normalize token usage dict from API response."""
+        if not isinstance(usage_meta, dict):
+            return None
+        return {
+            "prompt_tokens": usage_meta.get("input_tokens", 0),
+            "completion_tokens": usage_meta.get("output_tokens", 0),
+            "total_tokens": usage_meta.get("total_tokens", 0),
+        }
+
     def render_stream(self, events):
         """Render streaming events inline with panels."""
         import inspect
@@ -95,7 +105,7 @@ class StreamRenderer:
                 if hasattr(out, "content") and out.content:
                     final_text = out.content
                 usage_meta = getattr(out, "usage_metadata", None) or getattr(out, "response_metadata", {})
-                token_info = usage_meta if isinstance(usage_meta, dict) and "input_tokens" in usage_meta else {"prompt_tokens": usage_meta.get("input_tokens", 0) if isinstance(usage_meta, dict) else 0, "completion_tokens": usage_meta.get("output_tokens", 0) if isinstance(usage_meta, dict) else 0, "total_tokens": usage_meta.get("total_tokens", 0) if isinstance(usage_meta, dict) else 0}
+                token_info = self._normalize_tokens(usage_meta)
                 self.last_token_usage = token_info
                 self._record_tokens(token_info)
 
@@ -133,7 +143,7 @@ class StreamRenderer:
                 if hasattr(out, "content") and out.content:
                     final_text = out.content
                 usage_meta = getattr(out, "usage_metadata", None) or getattr(out, "response_metadata", {})
-                token_info = usage_meta if isinstance(usage_meta, dict) and "input_tokens" in usage_meta else {"prompt_tokens": usage_meta.get("input_tokens", 0) if isinstance(usage_meta, dict) else 0, "completion_tokens": usage_meta.get("output_tokens", 0) if isinstance(usage_meta, dict) else 0, "total_tokens": usage_meta.get("total_tokens", 0) if isinstance(usage_meta, dict) else 0}
+                token_info = self._normalize_tokens(usage_meta)
                 self.last_token_usage = token_info
                 self._record_tokens(token_info)
 

@@ -4,7 +4,6 @@ All functions are self-contained and testable without REPL dependencies.
 """
 
 import os
-import base64
 from pathlib import Path
 
 

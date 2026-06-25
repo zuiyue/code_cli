@@ -59,11 +59,6 @@ class BashSession:
         return output if output else "(no output)"
 
 
-def init_bash_session(root: str, max_output_lines: int = 500) -> BashSession:
-    """Create and return a new BashSession. Caller keeps the reference."""
-    return BashSession(root, max_output_lines)
-
-
 def create_bash_tool(session: BashSession):
     """Create a bash tool bound to a specific BashSession instance."""
     @tool

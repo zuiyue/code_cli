@@ -43,10 +43,6 @@ class TokenTracker:
     def round_count(self):
         return len(self._rounds)
 
-    @property
-    def latest(self) -> dict | None:
-        return self._rounds[-1] if self._rounds else None
-
     def summary(self) -> str:
         if not self._rounds:
             return "No usage data yet."
