@@ -1,5 +1,4 @@
 import asyncio
-import os
 import subprocess
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -16,9 +15,9 @@ from aicoder.config.permissions import PermissionManager
 from aicoder.config.skills import SkillManager
 from aicoder.agent.factory import create_agent
 from aicoder.agent.bash_tool import BashSession
-from aicoder.agent.models import list_models, get_model_info, supports_vision
-from aicoder.agent.images import read_image, has_clipboard_image, read_clipboard_image, ImageError
-from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
+from aicoder.agent.models import list_models, get_model_info
+from aicoder.agent.images import has_clipboard_image, read_clipboard_image
+from aicoder.agent.vision import ImageAttachment
 from aicoder.agent.stats import TokenTracker
 from aicoder.agent.mcp_client import MCPClient
 from aicoder.cli.runtime import (ensure_vision_model, resolve_image, rebuild_agent,
@@ -69,14 +68,6 @@ def screenshot(event):
         print("\n  Screenshot failed: macOS Screen Recording permission required.\n"
               "  Fix: System Settings > Privacy & Security > Screen Recording\n"
               "  Or use /image <path> to attach an image file.")
-
-
-
-
-
-
-    return None
-
 
 
 def run_repl(

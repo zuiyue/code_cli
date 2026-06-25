@@ -1,13 +1,11 @@
 """Agent runtime: lifecycle management, image resolution, streaming invocation."""
 
 import asyncio
-from pathlib import Path as _Path
 
-from aicoder.agent.models import get_model_info, supports_vision
+from aicoder.agent.models import supports_vision
 from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
 from aicoder.agent.images import read_image, read_clipboard_image, ImageError
 from aicoder.agent.factory import create_agent
-from aicoder.agent.diff import show_diff
 from aicoder.cli.interrupts import FileWriteHandler, BashApprovalHandler, AutoApproveHandler
 
 # Project root passed by REPL at startup
