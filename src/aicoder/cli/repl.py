@@ -19,7 +19,7 @@ from aicoder.agent.bash_tool import init_bash_session
 from aicoder.agent.models import list_models, get_model_info, supports_vision, MODEL_REGISTRY
 from aicoder.agent.images import read_image as _read_image_raw, has_clipboard_image, read_clipboard_image, ImageError
 from aicoder.agent.vision import ImageAttachment, pick_vision_model, describe_model
-from aicoder.util import project_hash, RECURSION_LIMIT
+from aicoder.util import project_hash, RECURSION_LIMIT_KEY, RECURSION_LIMIT
 
 
 STYLE = Style.from_dict({
@@ -166,7 +166,7 @@ def _resolve_image(cmd_result) -> tuple[ImageAttachment, str] | None:
 
     langgraph_config = {
         "configurable": {"thread_id": thread_id},
-        str(RECURSION_LIMIT): RECURSION_LIMIT,
+        RECURSION_LIMIT_KEY: RECURSION_LIMIT,
     }
 
     while True:
@@ -469,7 +469,7 @@ def run_repl(
 
     langgraph_config = {
         "configurable": {"thread_id": thread_id},
-        str(RECURSION_LIMIT): RECURSION_LIMIT,
+        RECURSION_LIMIT_KEY: RECURSION_LIMIT,
     }
 
     while True:
