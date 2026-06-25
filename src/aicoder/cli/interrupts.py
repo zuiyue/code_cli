@@ -1,7 +1,21 @@
 """HITL interrupt handlers — strategy pattern for different tool approvals."""
 
+from abc import ABC, abstractmethod
+from langgraph.types import Command
+
 from aicoder.agent.diff import show_diff
 
+
+class InterruptHandler(ABC):
+    """Base class for interrupt handlers."""
+
+    @abstractmethod
+    def can_handle(self, tool_name: str, args: dict) -> bool:
+        """Return True if this handler can handle the given tool call."""
+
+    @abstractmethod
+    def handle(self, tool_name: str, args: dict) -> dict:
+        """Handle the interrupt. Returns a resume value for Command."""
 
 
 class FileWriteHandler(InterruptHandler):
