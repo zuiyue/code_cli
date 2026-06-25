@@ -130,6 +130,9 @@ def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0
         raise ValueError(f"Unknown model: {model_name}. Available: {list_models()}")
 
     key = os.environ.get(info["env_key"], "") or api_key
+    if info.get("vision"):
+        import sys
+        print(f"[vision] model={model_name}, env_key={info['env_key']}, key_present={bool(key)}, key_len={len(key) if key else 0}", file=sys.stderr)
 
     if info["provider"] in ("deepseek", "openai", "zhipu"):
         return ChatOpenAI(
