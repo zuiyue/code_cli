@@ -459,9 +459,20 @@ async def _async_invoke_with_stream(agent, user_input, config, gate, renderer,
             tool_input = {}
             if hasattr(interrupt, "value") and isinstance(interrupt.value, dict):
                 tool_input = interrupt.value.get("input", {})
-            command = tool_input.get("command", str(tool_input))
+            command = tool_input.get("command", "")
 
-            if gate.is_denied(command):
+            # File write/edit — show diff
+            if command == "":
+                file_path = tool_input.get("file_path", "")
+                content = tool_input.get("content", "")
+                if file_path and content is not None:
+                    from aicoder.agent.diff import show_diff
+                    print(show_diff(file_path, content))
+                    d = input("  Write? [y]es / [n]o: ").strip().lower()
+                    next_input = Command(resume={"decision": "allow" if d == "y" else "deny"})
+                    continue
+
+            # Bash command approval
                 renderer.print_info(f"  [Denied: {command[:80]}]")
                 next_input = Command(resume={"decision": "deny"})
                 continue
