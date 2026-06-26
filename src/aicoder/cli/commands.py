@@ -4,7 +4,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
                 "/skills", "/skill", "/image", "/stats", "/export",
-                "/mcp", "/exit"]
+                "/mcp", "/init", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -95,6 +95,7 @@ class CommandHandler:
             "/stats": self._stats,
             "/export": lambda: self._export(arg),
             "/mcp": lambda: self._mcp(arg, arg2),
+            "/init": self._init_project,
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -120,6 +121,7 @@ class CommandHandler:
             "  /export [format]   Export conversation (md/json)\n"
             "  /mcp list          List MCP servers\n"
             "  /mcp connect <cmd> Connect MCP server\n"
+            "  /init              Analyze project and create AGENTS.md\n"
             "  /exit              Exit"
         )
 
@@ -282,6 +284,17 @@ class CommandHandler:
         elif action == "disconnect":
             return f"__MCP__DISCONNECT__{arg}"
         return "Usage: /mcp [list|connect|disconnect]"
+
+    def _init_project(self) -> str:
+        try:
+            from pathlib import Path
+            from aicoder.agent.init_project import analyze_project
+            content = analyze_project(self._project_root)
+            path = Path(self._project_root) / "AGENTS.md"
+            path.write_text(content)
+            return f"AGENTS.md created at {path}\n\n{content[:300]}..."
+        except Exception as e:
+            return f"Failed: {e}"
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""
