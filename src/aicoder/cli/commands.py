@@ -308,7 +308,7 @@ class CommandHandler:
     def _toggle_plan(self) -> str:
         self._plan_mode = not self._plan_mode
         if self._plan_mode:
-            return "Plan mode — tools disabled. Use /build to enable execution."
+            return "__PLAN_MODE_ON__"
         return "Build mode — all tools enabled."
 
     def _image(self, arg: str) -> str:

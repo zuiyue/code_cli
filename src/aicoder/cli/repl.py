@@ -257,6 +257,16 @@ def run_repl(
                 print()
                 continue
 
+            # Handle /plan with task description
+            if result == "__PLAN_MODE_ON__":
+                print("Plan mode — tools disabled. Use /build to enable execution.")
+                task = user_input[5:].strip() if len(user_input) > 5 else ""
+                if task:
+                    user_input = task
+                    # Fall through to regular invoke (plan prefix applied below)
+                else:
+                    continue
+
             # Handle MCP connect/disconnect
             if result and result.startswith("__MCP__CONNECT__"):
                 payload = result[len("__MCP__CONNECT__"):]
