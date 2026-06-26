@@ -4,7 +4,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
                 "/skills", "/skill", "/image", "/stats", "/export",
-                "/mcp", "/init", "/exit"]
+                "/mcp", "/init", "/plan", "/build", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -50,6 +50,7 @@ class CommandHandler:
         self._export_agent = None
         self._export_config = None
         self._mcp_client = None
+        self._plan_mode = False
 
     @property
     def current_model(self) -> str:
@@ -71,6 +72,10 @@ class CommandHandler:
 
     def set_mcp_client(self, client):
         self._mcp_client = client
+
+    @property
+    def plan_mode(self) -> bool:
+        return self._plan_mode
 
     def is_command(self, text: str) -> bool:
         return text.strip().startswith("/")
@@ -96,6 +101,8 @@ class CommandHandler:
             "/export": lambda: self._export(arg),
             "/mcp": lambda: self._mcp(arg, arg2),
             "/init": self._init_project,
+            "/plan": self._toggle_plan,
+            "/build": self._toggle_plan,
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -122,6 +129,8 @@ class CommandHandler:
             "  /mcp list          List MCP servers\n"
             "  /mcp connect <cmd> Connect MCP server\n"
             "  /init              Analyze project and create AGENTS.md\n"
+            "  /plan              Plan mode (no execution)\n"
+            "  /build             Build mode (execute)\n"
             "  /exit              Exit"
         )
 
@@ -295,6 +304,12 @@ class CommandHandler:
             return f"AGENTS.md created at {path}\n\n{content[:300]}..."
         except Exception as e:
             return f"Failed: {e}"
+
+    def _toggle_plan(self) -> str:
+        self._plan_mode = not self._plan_mode
+        if self._plan_mode:
+            return "Plan mode — I will create plans, not execute. Use /build to switch back."
+        return "Build mode — I will execute and make changes."
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""

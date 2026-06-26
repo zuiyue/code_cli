@@ -355,6 +355,8 @@ def run_repl(
                                                gate, renderer, prebuilt_message=msg)
                 )
             else:
+                if cmd_handler.plan_mode:
+                    user_input = f"Create a detailed step-by-step plan for this task. Do NOT execute anything — no bash commands, no file writes, no edits. Just describe the approach:\n\n{user_input}"
                 loop.run_until_complete(
                     invoke_stream(agent, user_input, langgraph_config, gate, renderer)
                 )
