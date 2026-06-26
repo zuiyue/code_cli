@@ -112,17 +112,17 @@ async def invoke_stream(agent, user_input, config, gate, renderer,
                     next_input = Command(resume={"decisions": [{"type": "approve"}]})
                     continue
 
+                # Collect decisions for all action requests, then resume once
+                decisions = []
                 for ar in action_requests:
                     tool_name = ar.get("name", "")
                     args = ar.get("args", {})
 
-                    # Auto-deny all tools in plan mode
                     if plan_mode:
                         print(f"  [Plan mode: {tool_name} denied]")
-                        next_input = Command(resume={"decisions": [{"type": "reject"}]})
+                        decisions.append({"type": "reject"})
                         continue
 
-                    # Strategy pattern: find the first handler that can handle this
                     handlers = [
                         FileWriteHandler(),
                         BashApprovalHandler(gate),
@@ -130,8 +130,10 @@ async def invoke_stream(agent, user_input, config, gate, renderer,
                     ]
                     for h in handlers:
                         if h.can_handle(tool_name, args):
-                            next_input = Command(resume=h.handle(tool_name, args))
+                            decisions.append(h.handle(tool_name, args)["decisions"][0])
                             break
+
+                next_input = Command(resume={"decisions": decisions})
 
         except Exception as e:
             error_msg = str(e)
