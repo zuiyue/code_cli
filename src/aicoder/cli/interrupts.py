@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from langgraph.types import Command
 
 from aicoder.agent.diff import show_diff
+from aicoder.agent.snapshot import snapshot
 
 
 class InterruptHandler(ABC):
@@ -27,6 +28,7 @@ class FileWriteHandler(InterruptHandler):
     def handle(self, tool_name: str, args: dict) -> dict:
         file_path = args.get("file_path", "")
         content = args.get("content", "")
+        snapshot(file_path)  # backup before modification
         print(show_diff(file_path, content))
         d = input("  Write? [y]es / [n]o: ").strip().lower()
         return {"decisions": [{"type": "approve" if d == "y" else "reject"}]}

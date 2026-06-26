@@ -4,7 +4,7 @@ from prompt_toolkit.completion import Completer, Completion
 
 ALL_COMMANDS = ["/help", "/clear", "/sessions", "/model", "/models",
                 "/skills", "/skill", "/image", "/stats", "/export",
-                "/mcp", "/init", "/plan", "/build", "/exit"]
+                "/mcp", "/init", "/plan", "/build", "/undo", "/search", "/exit"]
 
 
 class ModelCompleter(Completer):
@@ -103,6 +103,8 @@ class CommandHandler:
             "/init": self._init_project,
             "/plan": self._toggle_plan,
             "/build": self._toggle_plan,
+            "/undo": self._undo,
+            "/search": lambda: self._search(arg),
             "/exit": lambda: "exit",
         }
         handler = handlers.get(cmd)
@@ -131,6 +133,8 @@ class CommandHandler:
             "  /init              Analyze project and create AGENTS.md\n"
             "  /plan              Plan mode (no execution)\n"
             "  /build             Build mode (execute)\n"
+            "  /undo              Undo last agent file changes\n"
+            "  /search <query>    Search the web\n"
             "  /exit              Exit"
         )
 
@@ -310,6 +314,20 @@ class CommandHandler:
         if self._plan_mode:
             return "__PLAN_MODE_ON__"
         return "Build mode — all tools enabled."
+
+    def _undo(self) -> str:
+        from aicoder.agent.snapshot import undo_all, clear
+        restored = undo_all()
+        clear()
+        if restored:
+            return f"Undone changes to: {', '.join(restored)}"
+        return "Nothing to undo."
+
+    def _search(self, query: str) -> str:
+        if not query:
+            return "Usage: /search <query>"
+        from aicoder.agent.web import web_search
+        return web_search(query)
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""
