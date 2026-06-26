@@ -356,9 +356,20 @@ def run_repl(
                 )
             else:
                 if cmd_handler.plan_mode:
-                    user_input = ("PLAN MODE — tools are disabled. Create a detailed step-by-step plan. "
-                                  "Do NOT attempt to call any tools (write_file, edit_file, bash). "
-                                  "Just describe the approach.\n\n" + user_input)
+                    user_input = (
+                        "You are in PLAN MODE. Your role is to be an interactive product architect.\n\n"
+                        "WORKFLOW:\n"
+                        "1. Understand the goal — ask ONE clarifying question at a time\n"
+                        "2. Propose 2-3 approaches with trade-offs\n"
+                        "3. Write a design document to docs/specs/<topic>.md\n"
+                        "4. Ask user to review before proceeding\n\n"
+                        "RULES:\n"
+                        "- Ask only ONE question per response\n"
+                        "- Never execute — tools are disabled\n"
+                        "- Write specs to docs/specs/YYYY-MM-DD-topic.md\n"
+                        "- After writing spec, say: 'Spec saved to docs/specs/. Review and /build to implement.'\n\n"
+                        "TASK:\n" + user_input
+                    )
                 loop.run_until_complete(
                     invoke_stream(agent, user_input, langgraph_config, gate, renderer,
                                   plan_mode=cmd_handler.plan_mode)
