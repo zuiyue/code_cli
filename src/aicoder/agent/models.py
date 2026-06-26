@@ -2,6 +2,11 @@ import os
 import httpx
 from langchain_openai import ChatOpenAI
 
+try:
+    from langchain_anthropic import ChatAnthropic
+except ImportError:
+    ChatAnthropic = None
+
 # Monkey-patch httpx to filter non-ASCII headers (prompt_toolkit causes Unicode leak)
 _original_headers_init = httpx.Headers.__init__
 
@@ -68,6 +73,22 @@ MODEL_REGISTRY = {
         "vision": False,
         "note": "Does not support standard image_url format. Use glm-4v or gpt-4o.",
     },
+    "claude-sonnet-4-5": {
+        "display": "Claude Sonnet 4",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5-20250929",
+        "api_base": "https://api.anthropic.com",
+        "env_key": "ANTHROPIC_API_KEY",
+        "vision": True,
+    },
+    "claude-haiku-4-5": {
+        "display": "Claude Haiku 4",
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20250501",
+        "api_base": "https://api.anthropic.com",
+        "env_key": "ANTHROPIC_API_KEY",
+        "vision": True,
+    },"
     "gpt-4o": {
         "display": "GPT-4o",
         "provider": "openai",
@@ -128,6 +149,14 @@ def create_chat_model(model_name: str, api_key: str = "", temperature: float = 0
             model=info["model"],
             api_key=key,
             base_url=info["api_base"],
+            temperature=temperature,
+        )
+    elif info["provider"] == "anthropic":
+        if ChatAnthropic is None:
+            raise ImportError("pip install langchain-anthropic to use Claude models")
+        return ChatAnthropic(
+            model=info["model"],
+            api_key=key,
             temperature=temperature,
         )
 

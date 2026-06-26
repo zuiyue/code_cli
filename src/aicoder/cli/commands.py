@@ -308,8 +308,8 @@ class CommandHandler:
     def _toggle_plan(self) -> str:
         self._plan_mode = not self._plan_mode
         if self._plan_mode:
-            return "Plan mode — I will create plans, not execute. Use /build to switch back."
-        return "Build mode — I will execute and make changes."
+            return "Plan mode — tools disabled. Use /build to enable execution."
+        return "Build mode — all tools enabled."
 
     def _image(self, arg: str) -> str:
         """Return image file path. Description in arg2 handled by REPL."""

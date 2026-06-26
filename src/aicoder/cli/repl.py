@@ -356,9 +356,12 @@ def run_repl(
                 )
             else:
                 if cmd_handler.plan_mode:
-                    user_input = f"Create a detailed step-by-step plan for this task. Do NOT execute anything — no bash commands, no file writes, no edits. Just describe the approach:\n\n{user_input}"
+                    user_input = ("PLAN MODE — tools are disabled. Create a detailed step-by-step plan. "
+                                  "Do NOT attempt to call any tools (write_file, edit_file, bash). "
+                                  "Just describe the approach.\n\n" + user_input)
                 loop.run_until_complete(
-                    invoke_stream(agent, user_input, langgraph_config, gate, renderer)
+                    invoke_stream(agent, user_input, langgraph_config, gate, renderer,
+                                  plan_mode=cmd_handler.plan_mode)
                 )
         except Exception as e:
             renderer.print_error(f"[Error: {e}]")

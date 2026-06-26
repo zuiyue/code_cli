@@ -70,11 +70,10 @@ def rebuild_agent(cfg, project_root, bash_session, state_db, store_db,
 
 async def invoke_stream(agent, user_input, config, gate, renderer,
                         max_retries=5, prebuilt_message: dict | None = None,
-                        mcp_client=None, extra_tools_callback=None):
+                        plan_mode: bool = False):
     """Invoke agent with streaming + HITL interrupt handling.
 
-    After the stream, checks for HITL interrupts (write_file, edit_file, bash)
-    and handles them with user confirmation. Retries on connection errors.
+    In plan_mode, all write_file/edit_file/bash calls are auto-denied.
     """
     from langgraph.types import Command
 
@@ -116,6 +115,12 @@ async def invoke_stream(agent, user_input, config, gate, renderer,
                 for ar in action_requests:
                     tool_name = ar.get("name", "")
                     args = ar.get("args", {})
+
+                    # Auto-deny all tools in plan mode
+                    if plan_mode:
+                        print(f"  [Plan mode: {tool_name} denied]")
+                        next_input = Command(resume={"decisions": [{"type": "reject"}]})
+                        continue
 
                     # Strategy pattern: find the first handler that can handle this
                     handlers = [
