@@ -88,7 +88,7 @@ MODEL_REGISTRY = {
         "api_base": "https://api.anthropic.com",
         "env_key": "ANTHROPIC_API_KEY",
         "vision": True,
-    },"
+    },
     "gpt-4o": {
         "display": "GPT-4o",
         "provider": "openai",
