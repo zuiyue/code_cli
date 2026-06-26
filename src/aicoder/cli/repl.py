@@ -257,15 +257,39 @@ def run_repl(
                 print()
                 continue
 
-            # Handle /plan with task description
+            # Handle /plan with task: enter plan mode AND process task
             if result == "__PLAN_MODE_ON__":
-                print("Plan mode — tools disabled. Use /build to enable execution.")
+                result = "Plan mode — tools disabled. Use /build to enable execution."
                 task = user_input[5:].strip() if len(user_input) > 5 else ""
                 if task:
-                    user_input = task
-                    # Fall through to regular invoke (plan prefix applied below)
-                else:
+                    if cmd_handler.plan_mode:
+                        task = (
+                            "You are in PLAN MODE. Your role is to be an interactive product architect.\n\n"
+                            "WORKFLOW:\n"
+                            "1. Understand the goal — ask ONE clarifying question at a time\n"
+                            "2. Propose 2-3 approaches with trade-offs\n"
+                            "3. Write a design document to docs/specs/<topic>.md\n"
+                            "4. Ask user to review before proceeding\n\n"
+                            "RULES:\n"
+                            "- Ask only ONE question per response\n"
+                            "- Never execute — tools are disabled\n"
+                            "- Write specs to docs/specs/YYYY-MM-DD-topic.md\n"
+                            "- After writing spec, treat as done\n\n"
+                            "TASK:\n" + task
+                        )
+                    print("Plan mode — tools disabled.")
+                    try:
+                        loop.run_until_complete(
+                            invoke_stream(agent, task, langgraph_config, gate, renderer,
+                                          plan_mode=True)
+                        )
+                    except Exception as e:
+                        renderer.print_error(f"[Error: {e}]")
+                    print()
                     continue
+                # No task — just toggle
+                print("Plan mode — tools disabled. Use /build to enable execution.")
+                continue
 
             # Handle MCP connect/disconnect
             if result and result.startswith("__MCP__CONNECT__"):
